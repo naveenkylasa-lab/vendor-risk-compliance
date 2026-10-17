@@ -1,0 +1,1371 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SentinelTPRM — Vendor Risk & Compliance Multi-Agent Command Center</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            slate: {
+              850: '#131c2e',
+              925: '#0b1120',
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    @keyframes pulseRing {
+      0% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.55); }
+      70% { box-shadow: 0 0 0 10px rgba(56, 189, 248, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); }
+    }
+    .agent-running {
+      animation: pulseRing 1.5s infinite;
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+  </style>
+</head>
+<body class="bg-slate-925 text-slate-100 min-h-screen font-sans antialiased selection:bg-sky-500 selection:text-white">
+
+  <!-- Top Navigation Header -->
+  <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-[1600px] mx-auto px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20 font-bold text-lg">
+          VRC
+        </div>
+        <div>
+          <div class="flex items-center gap-2.5">
+            <h1 class="text-lg font-bold tracking-tight text-white">Vendor Risk & Compliance Multi-Agent Orchestrator</h1>
+            <span class="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30">
+              5-Phase TPRM Pipeline
+            </span>
+          </div>
+          <p class="text-xs text-slate-400">Autonomous Intake Triage • InfoSec & Cyber • Legal & OFAC • Financial/BCP • Compliance Officer Sign-Off</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3 text-xs">
+        <div id="engine-badge" class="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <span id="engine-text">Initializing Engine...</span>
+        </div>
+        <div id="llm-badge" class="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300">
+          Mode: Checking...
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace Container -->
+  <main class="max-w-[1600px] mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- Left Column: Vendor Presets & Editable Configuration -->
+    <aside class="lg:col-span-4 space-y-5">
+      <!-- Sample Vendor Packets -->
+      <section class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300">1. Select Vendor Onboarding Packet</h2>
+          <span class="text-xs text-slate-400">4 Presets</span>
+        </div>
+        <div id="preset-list" class="space-y-2.5">
+          <!-- Populated dynamically -->
+        </div>
+      </section>
+
+      <!-- Live Editable Vendor Attributes & What-If Simulator -->
+      <section class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+        <div class="flex items-center justify-between mb-3">
+          <div>
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300">2. Vendor Profile & Risk Controls</h2>
+            <p class="text-xs text-slate-400">Customize parameters to test agent behavior</p>
+          </div>
+          <button onclick="resetToNewCustomVendor()" class="text-xs px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-400 border border-slate-700 transition">
+            + Blank Form
+          </button>
+        </div>
+
+        <div class="space-y-3 text-xs">
+          <div class="grid grid-cols-2 gap-2.5">
+            <div>
+              <label class="block text-slate-400 mb-1">Vendor Name</label>
+              <input id="f-name" type="text" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white focus:border-sky-500 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Jurisdiction / Country</label>
+              <input id="f-country" type="text" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white focus:border-sky-500 focus:outline-none" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2.5">
+            <div>
+              <label class="block text-slate-400 mb-1">Category</label>
+              <input id="f-category" type="text" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white focus:border-sky-500 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Annual Spend (USD)</label>
+              <input id="f-acv" type="number" step="10000" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white focus:border-sky-500 focus:outline-none" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2.5">
+            <div>
+              <label class="block text-slate-400 mb-1">Data Sensitivity</label>
+              <select id="f-sensitivity" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white focus:border-sky-500 focus:outline-none">
+                <option value="RESTRICTED_PII_PHI_PCI">Restricted (PII / PHI / PCI)</option>
+                <option value="CONFIDENTIAL_INTERNAL">Confidential Internal</option>
+                <option value="INTERNAL_NON_SENSITIVE">Internal Non-Sensitive</option>
+                <option value="PUBLIC_ONLY">Public Data Only</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Records Exposed</label>
+              <input id="f-records" type="number" step="5000" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white focus:border-sky-500 focus:outline-none" />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-slate-400 mb-1">Scope & Service Description</label>
+            <textarea id="f-desc" rows="2" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white focus:border-sky-500 focus:outline-none"></textarea>
+          </div>
+
+          <!-- Domain Control Toggles -->
+          <div class="pt-2 border-t border-slate-800">
+            <div class="font-semibold text-slate-300 mb-2">Security, Legal & Financial Postures</div>
+            <div class="grid grid-cols-2 gap-2">
+              <label class="flex items-center gap-2 bg-slate-950/70 p-2 rounded-lg border border-slate-800/80 cursor-pointer">
+                <input id="f-soc2" type="checkbox" class="rounded text-sky-500 focus:ring-0" />
+                <span>SOC 2 Type II Certified</span>
+              </label>
+              <label class="flex items-center gap-2 bg-slate-950/70 p-2 rounded-lg border border-slate-800/80 cursor-pointer">
+                <input id="f-iso" type="checkbox" class="rounded text-sky-500 focus:ring-0" />
+                <span>ISO 27001 Certified</span>
+              </label>
+              <label class="flex items-center gap-2 bg-slate-950/70 p-2 rounded-lg border border-slate-800/80 cursor-pointer">
+                <input id="f-mfa" type="checkbox" class="rounded text-sky-500 focus:ring-0" />
+                <span>MFA & SSO Enforced</span>
+              </label>
+              <label class="flex items-center gap-2 bg-slate-950/70 p-2 rounded-lg border border-slate-800/80 cursor-pointer">
+                <input id="f-aitrain" type="checkbox" class="rounded text-rose-500 focus:ring-0" />
+                <span class="text-amber-300">Trains AI on Customer Data</span>
+              </label>
+              <label class="flex items-center gap-2 bg-slate-950/70 p-2 rounded-lg border border-slate-800/80 cursor-pointer">
+                <input id="f-dpa" type="checkbox" class="rounded text-sky-500 focus:ring-0" />
+                <span>GDPR/CCPA DPA Signed</span>
+              </label>
+              <label class="flex items-center gap-2 bg-slate-950/70 p-2 rounded-lg border border-slate-800/80 cursor-pointer">
+                <input id="f-sanctions" type="checkbox" class="rounded text-rose-500 focus:ring-0" />
+                <span class="text-rose-400">OFAC Sanctions Hit</span>
+              </label>
+              <label class="col-span-2 flex items-center gap-2 bg-amber-950/30 p-2 rounded-lg border border-amber-500/40 cursor-pointer">
+                <input id="f-encrypted-pdf" type="checkbox" class="rounded text-amber-400 focus:ring-0" />
+                <span class="text-amber-300 font-medium">Simulate Encrypted PDF Upload (Test Guided Tool Error)</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2 pt-1">
+            <div>
+              <label class="block text-slate-400 mb-1">Critical CVEs</label>
+              <input id="f-crit-cves" type="number" min="0" max="20" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-white" />
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Credit (0-100)</label>
+              <input id="f-credit" type="number" min="0" max="100" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-white" />
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Runway (Mos)</label>
+              <input id="f-runway" type="number" min="1" max="120" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-white" />
+            </div>
+          </div>
+
+          <button id="run-btn" onclick="executeOnboardingStream()" class="w-full mt-3 py-3 px-4 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-semibold text-sm shadow-lg shadow-sky-500/25 flex items-center justify-center gap-2 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>Launch Sequential Pipeline (Extraction → Policy Check)</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- 3. Conversational Pattern + Persistent Memory + Active PII Redaction -->
+      <section class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3 text-xs">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300">3. Vendor Support Chat (Conversational Pattern)</h2>
+            <p class="text-xs text-slate-400">Routes questions to <span class="text-sky-400 font-mono">gemini-2.5-flash</span> + Persistent Memory + PII Scrubbing</p>
+          </div>
+        </div>
+        <textarea id="chat-input" rows="3" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white focus:border-sky-500 focus:outline-none">Contact: Sarah Jenkins (sarah.j@cloudscale.io, 415-890-2311, TIN 412-88-9012) — What is our current onboarding status and what certifications do you require?</textarea>
+        <button onclick="sendVendorQuestion()" class="w-full py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-sky-500/40 text-sky-300 font-semibold transition">
+          Ask Coordinator & Support Agent (Flash + PII Redactor)
+        </button>
+        <div id="chat-output" class="hidden space-y-2 p-3 rounded-xl bg-slate-950 border border-slate-800"></div>
+      </section>
+    </aside>
+
+    <!-- Right Column: Multi-Agent Pipeline Visualizer & Deep-Dive Workspace -->
+    <section class="lg:col-span-8 space-y-6">
+
+      <!-- 5-Phase Agent Pipeline Stepper -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300">Autonomous Multi-Agent Onboarding Graph</h2>
+            <p class="text-xs text-slate-400">Click any completed agent node to inspect its tool traces and findings</p>
+          </div>
+          <div id="pipeline-live-status" class="text-xs font-medium text-sky-400">Ready to run</div>
+        </div>
+
+        <div id="agent-pipeline-grid" class="grid grid-cols-1 sm:grid-cols-5 gap-3">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+
+      <!-- Final Compliance Decision Executive Card -->
+      <div id="decision-banner" class="hidden bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+        <!-- Populated when pipeline finishes -->
+      </div>
+
+      <!-- Detailed Inspection Tabs -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+        <div class="border-b border-slate-800 px-5 pt-3 flex items-center gap-2 overflow-x-auto">
+          <button onclick="switchTab('agents')" id="tab-btn-agents" class="tab-btn px-4 py-2.5 text-xs font-semibold border-b-2 border-sky-500 text-sky-400">
+            Specialist Agent Reports (5)
+          </button>
+          <button onclick="switchTab('findings')" id="tab-btn-findings" class="tab-btn px-4 py-2.5 text-xs font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200">
+            Risk Findings Register (<span id="count-findings">0</span>)
+          </button>
+          <button onclick="switchTab('remediation')" id="tab-btn-remediation" class="tab-btn px-4 py-2.5 text-xs font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200">
+            Remediation Action Plan (<span id="count-remediation">0</span>)
+          </button>
+          <button onclick="switchTab('audit')" id="tab-btn-audit" class="tab-btn px-4 py-2.5 text-xs font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200">
+            Audit Trail & Tool Telemetry
+          </button>
+        </div>
+
+        <div class="p-5">
+          <!-- Tab 1: Specialist Agent Reports -->
+          <div id="tab-agents" class="space-y-4">
+            <div class="text-center py-12 text-slate-500 text-sm">
+              Select a vendor packet on the left and click <strong>Launch 5-Agent Onboarding Pipeline</strong> to begin.
+            </div>
+          </div>
+
+          <!-- Tab 2: Risk Findings Register -->
+          <div id="tab-findings" class="hidden"></div>
+
+          <!-- Tab 3: Remediation Plan -->
+          <div id="tab-remediation" class="hidden"></div>
+
+          <!-- Tab 4: Audit Trail -->
+          <div id="tab-audit" class="hidden"></div>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <script>
+    const AGENT_PHASES = [
+      { id: 'intake', step: 'Phase 1', name: 'Intake & Triage', role: 'Tiering & Doc Check' },
+      { id: 'infosec', step: 'Phase 2', name: 'InfoSec & Cyber', role: 'SOC2, CVEs & AI Safety' },
+      { id: 'legal', step: 'Phase 3', name: 'Legal & Privacy', role: 'DPA, SCCs & OFAC' },
+      { id: 'financial', step: 'Phase 4', name: 'Financial & Ops', role: 'Credit, BCP/DR & SLA' },
+      { id: 'compliance_officer', step: 'Phase 5', name: 'Compliance Officer', role: 'Aggregator & Sign-Off' },
+    ];
+
+    const FALLBACK_PRESETS = [
+      {
+        vendor_id: "VND-1001",
+        name: "CloudScale AI Inc.",
+        category: "Enterprise AI & Cloud Data Platform",
+        website: "https://cloudscale-ai.example.com",
+        country: "United States",
+        business_sponsor: "VP of AI & Data Engineering",
+        service_description: "Managed LLM inference gateway and vector indexing pipeline for enterprise customer support tickets containing PII and account telemetry.",
+        annual_contract_value_usd: 420000,
+        data_sensitivity: "RESTRICTED_PII_PHI_PCI",
+        requires_network_integration: true,
+        estimated_records_exposed: 250000,
+        submitted_documents: ["SOC 2 Type II Report (2026)", "Master Services Agreement (Redlined)", "Data Processing Addendum (DPA)", "Penetration Test Executive Summary"],
+        security: { soc2_type2_certified: true, soc2_exceptions: ["CC6.2: Quarterly contractor access review delayed by 14 days."], iso27001_certified: false, encryption_at_rest: true, encryption_in_transit: true, mfa_enforced: true, sso_supported: true, recent_pentest_completed: true, open_critical_cves: 0, open_high_cves: 1, incident_notification_hours: 48, subprocessors_disclosed: true, ai_model_trains_on_customer_data: false },
+        legal: { msa_accepted: true, dpa_signed: true, gdpr_compliant: true, ccpa_compliant: true, hipaa_baa_available: false, cross_border_transfers: true, scc_mechanism_in_place: false, liability_cap_multiplier: 1.5, indemnification_clause_accepted: true, sanctions_watchlist_hit: false, adverse_media_flags: [], data_retention_deletion_sla_days: 30 },
+        financial: { years_in_business: 4, annual_revenue_usd: 28500000, debt_to_equity_ratio: 0.65, cash_runway_months: 22, credit_rating_score: 78, bcp_dr_tested_annually: true, rto_hours: 4.0, rpo_hours: 1.0, committed_sla_uptime_pct: 99.9, cyber_insurance_coverage_usd: 5000000, single_point_of_failure_risk: false }
+      },
+      {
+        vendor_id: "VND-1002",
+        name: "PayStream Global Ltd.",
+        category: "Payment Processing & Treasury Infrastructure",
+        website: "https://paystream-global.example.com",
+        country: "United Kingdom",
+        business_sponsor: "Chief Financial Officer",
+        service_description: "Automated global B2B settlement, ACH/Wire orchestration, and PCI-DSS tokenized billing vault for enterprise receivables.",
+        annual_contract_value_usd: 650000,
+        data_sensitivity: "RESTRICTED_PII_PHI_PCI",
+        requires_network_integration: true,
+        estimated_records_exposed: 500000,
+        submitted_documents: ["SOC 2 Type II Report (2026)", "ISO/IEC 27001:2022 Certificate", "Master Services Agreement (Signed)", "Data Processing Addendum & EU/UK SCCs", "Penetration Test Executive Summary"],
+        security: { soc2_type2_certified: true, soc2_exceptions: [], iso27001_certified: true, encryption_at_rest: true, encryption_in_transit: true, mfa_enforced: true, sso_supported: true, recent_pentest_completed: true, open_critical_cves: 0, open_high_cves: 0, incident_notification_hours: 24, subprocessors_disclosed: true, ai_model_trains_on_customer_data: false },
+        legal: { msa_accepted: true, dpa_signed: true, gdpr_compliant: true, ccpa_compliant: true, hipaa_baa_available: true, cross_border_transfers: true, scc_mechanism_in_place: true, liability_cap_multiplier: 3.0, indemnification_clause_accepted: true, sanctions_watchlist_hit: false, adverse_media_flags: [], data_retention_deletion_sla_days: 14 },
+        financial: { years_in_business: 12, annual_revenue_usd: 185000000, debt_to_equity_ratio: 0.4, cash_runway_months: 48, credit_rating_score: 92, bcp_dr_tested_annually: true, rto_hours: 1.0, rpo_hours: 0.25, committed_sla_uptime_pct: 99.99, cyber_insurance_coverage_usd: 20000000, single_point_of_failure_risk: false }
+      },
+      {
+        vendor_id: "VND-1003",
+        name: "ShadowAnalytics Corp.",
+        category: "Customer Telemetry & Behavioral Enrichment",
+        website: "https://shadowanalytics.example.io",
+        country: "Cayman Islands",
+        business_sponsor: "Director of Growth Marketing",
+        service_description: "Real-time SDK embedded in web and mobile apps to capture user session replays, IP geolocation, and identity graph enrichment across third-party ad networks.",
+        annual_contract_value_usd: 190000,
+        data_sensitivity: "RESTRICTED_PII_PHI_PCI",
+        requires_network_integration: true,
+        estimated_records_exposed: 1200000,
+        submitted_documents: ["Standard Vendor Terms of Service", "Self-Attested Security Questionnaire"],
+        security: { soc2_type2_certified: false, soc2_exceptions: [], iso27001_certified: false, encryption_at_rest: true, encryption_in_transit: true, mfa_enforced: false, sso_supported: false, recent_pentest_completed: false, open_critical_cves: 2, open_high_cves: 5, incident_notification_hours: 168, subprocessors_disclosed: false, ai_model_trains_on_customer_data: true },
+        legal: { msa_accepted: false, dpa_signed: false, gdpr_compliant: false, ccpa_compliant: false, hipaa_baa_available: false, cross_border_transfers: true, scc_mechanism_in_place: false, liability_cap_multiplier: 0.5, indemnification_clause_accepted: false, sanctions_watchlist_hit: true, adverse_media_flags: ["2025 EU Data Protection Authority Inquiry regarding unauthorized cookie syncing"], data_retention_deletion_sla_days: 180 },
+        financial: { years_in_business: 2, annual_revenue_usd: 3100000, debt_to_equity_ratio: 2.4, cash_runway_months: 7, credit_rating_score: 41, bcp_dr_tested_annually: false, rto_hours: 48.0, rpo_hours: 24.0, committed_sla_uptime_pct: 99.0, cyber_insurance_coverage_usd: 500000, single_point_of_failure_risk: true }
+      },
+      {
+        vendor_id: "VND-1004",
+        name: "OfficePulse Ergonomics LLC",
+        category: "Workplace Facilities & Office Equipment",
+        website: "https://officepulse-ergo.example.com",
+        country: "United States",
+        business_sponsor: "Head of Workplace Operations",
+        service_description: "Supply and scheduled maintenance of ergonomic standing desks and conference room acoustic panels. No IT system or PII access.",
+        annual_contract_value_usd: 35000,
+        data_sensitivity: "PUBLIC_ONLY",
+        requires_network_integration: false,
+        estimated_records_exposed: 0,
+        submitted_documents: ["Master Services Agreement (Signed)", "W-9 & Vendor Banking Verification"],
+        security: { soc2_type2_certified: false, soc2_exceptions: [], iso27001_certified: false, encryption_at_rest: true, encryption_in_transit: true, mfa_enforced: true, sso_supported: false, recent_pentest_completed: false, open_critical_cves: 0, open_high_cves: 0, incident_notification_hours: 72, subprocessors_disclosed: true, ai_model_trains_on_customer_data: false },
+        legal: { msa_accepted: true, dpa_signed: false, gdpr_compliant: true, ccpa_compliant: true, hipaa_baa_available: false, cross_border_transfers: false, scc_mechanism_in_place: false, liability_cap_multiplier: 2.0, indemnification_clause_accepted: true, sanctions_watchlist_hit: false, adverse_media_flags: [], data_retention_deletion_sla_days: 30 },
+        financial: { years_in_business: 9, annual_revenue_usd: 14000000, debt_to_equity_ratio: 0.5, cash_runway_months: 36, credit_rating_score: 84, bcp_dr_tested_annually: true, rto_hours: 24.0, rpo_hours: 12.0, committed_sla_uptime_pct: 99.5, cyber_insurance_coverage_usd: 2000000, single_point_of_failure_risk: false }
+      }
+    ];
+
+    let presets = [];
+    let selectedVendor = null;
+    let currentAssessment = null;
+    let phaseStates = {};
+    let backendAvailable = false;
+
+    async function initDashboard() {
+      renderPipelineNodes();
+      try {
+        const [healthRes, presetsRes] = await Promise.all([
+          fetch('/api/health'),
+          fetch('/api/vendors/presets')
+        ]);
+        if (!healthRes.ok || !presetsRes.ok) throw new Error('Backend offline');
+        const health = await healthRes.json();
+        presets = await presetsRes.json();
+        backendAvailable = true;
+
+        document.getElementById('engine-text').textContent = health.orchestrator_engine;
+        document.getElementById('llm-badge').textContent = `LLM: ${health.llm.active_mode} (${health.llm.provider})`;
+      } catch (err) {
+        backendAvailable = false;
+        presets = FALLBACK_PRESETS;
+        document.getElementById('engine-text').textContent = 'Browser StateGraph Runtime (Standalone Mode)';
+        document.getElementById('llm-badge').textContent = 'Mode: Built-in Compliance Engine';
+      }
+
+      renderPresets();
+      if (presets.length > 0) {
+        selectPreset(0);
+        await executeOnboardingStream();
+      }
+    }
+
+    function renderPresets() {
+      const container = document.getElementById('preset-list');
+      container.innerHTML = presets.map((v, idx) => {
+        const isSelected = selectedVendor && selectedVendor.vendor_id === v.vendor_id;
+        const sensBadge = v.data_sensitivity === 'RESTRICTED_PII_PHI_PCI'
+          ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+          : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
+        return `
+          <button onclick="selectPreset(${idx})" class="w-full text-left p-3 rounded-xl border transition ${
+            isSelected
+              ? 'bg-sky-500/10 border-sky-500/60 shadow-md'
+              : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+          }">
+            <div class="flex items-center justify-between">
+              <span class="font-semibold text-sm text-white">${v.name}</span>
+              <span class="text-[10px] font-mono px-2 py-0.5 rounded border ${sensBadge}">
+                ${v.data_sensitivity.replace(/_/g, ' ')}
+              </span>
+            </div>
+            <div class="text-xs text-slate-400 mt-1 flex items-center justify-between">
+              <span>${v.category}</span>
+              <span class="text-slate-300 font-medium">$${(v.annual_contract_value_usd / 1000).toFixed(0)}k/yr • ${v.country}</span>
+            </div>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function selectPreset(index) {
+      selectedVendor = JSON.parse(JSON.stringify(presets[index]));
+      populateFormFromVendor(selectedVendor);
+      renderPresets();
+    }
+
+    function resetToNewCustomVendor() {
+      selectedVendor = {
+        vendor_id: null,
+        name: "Acme Cloud Analytics Inc.",
+        category: "SaaS Data Platform",
+        website: "https://acme-analytics.example.com",
+        country: "United States",
+        business_sponsor: "VP of Engineering",
+        service_description: "Cloud analytics workspace processing internal product telemetry and customer email identifiers.",
+        annual_contract_value_usd: 150000,
+        data_sensitivity: "RESTRICTED_PII_PHI_PCI",
+        requires_network_integration: true,
+        estimated_records_exposed: 75000,
+        submitted_documents: [
+          "Master Services Agreement",
+          "SOC 2 Type II Report",
+          "Data Processing Addendum (DPA)",
+          "Penetration Test Summary"
+        ],
+        security: {
+          soc2_type2_certified: true,
+          soc2_exceptions: [],
+          iso27001_certified: false,
+          encryption_at_rest: true,
+          encryption_in_transit: true,
+          mfa_enforced: true,
+          sso_supported: true,
+          recent_pentest_completed: true,
+          open_critical_cves: 0,
+          open_high_cves: 0,
+          incident_notification_hours: 48,
+          subprocessors_disclosed: true,
+          ai_model_trains_on_customer_data: false
+        },
+        legal: {
+          msa_accepted: true,
+          dpa_signed: true,
+          gdpr_compliant: true,
+          ccpa_compliant: true,
+          hipaa_baa_available: false,
+          cross_border_transfers: false,
+          scc_mechanism_in_place: true,
+          liability_cap_multiplier: 2.0,
+          indemnification_clause_accepted: true,
+          sanctions_watchlist_hit: false,
+          adverse_media_flags: [],
+          data_retention_deletion_sla_days: 30
+        },
+        financial: {
+          years_in_business: 6,
+          annual_revenue_usd: 22000000,
+          debt_to_equity_ratio: 0.6,
+          cash_runway_months: 24,
+          credit_rating_score: 82,
+          bcp_dr_tested_annually: true,
+          rto_hours: 4.0,
+          rpo_hours: 1.0,
+          committed_sla_uptime_pct: 99.9,
+          cyber_insurance_coverage_usd: 5000000,
+          single_point_of_failure_risk: false
+        }
+      };
+      populateFormFromVendor(selectedVendor);
+      renderPresets();
+    }
+
+    function populateFormFromVendor(v) {
+      document.getElementById('f-name').value = v.name;
+      document.getElementById('f-country').value = v.country;
+      document.getElementById('f-category').value = v.category;
+      document.getElementById('f-acv').value = v.annual_contract_value_usd;
+      document.getElementById('f-sensitivity').value = v.data_sensitivity;
+      document.getElementById('f-records').value = v.estimated_records_exposed;
+      document.getElementById('f-desc').value = v.service_description;
+
+      document.getElementById('f-soc2').checked = v.security.soc2_type2_certified;
+      document.getElementById('f-iso').checked = v.security.iso27001_certified;
+      document.getElementById('f-mfa').checked = v.security.mfa_enforced && v.security.sso_supported;
+      document.getElementById('f-aitrain').checked = v.security.ai_model_trains_on_customer_data;
+      document.getElementById('f-dpa').checked = v.legal.dpa_signed;
+      document.getElementById('f-sanctions').checked = v.legal.sanctions_watchlist_hit;
+
+      document.getElementById('f-crit-cves').value = v.security.open_critical_cves;
+      document.getElementById('f-credit').value = v.financial.credit_rating_score;
+      document.getElementById('f-runway').value = v.financial.cash_runway_months;
+    }
+
+    function buildVendorPayloadFromForm() {
+      const base = selectedVendor ? JSON.parse(JSON.stringify(selectedVendor)) : {};
+      base.name = document.getElementById('f-name').value.trim() || 'Unnamed Vendor';
+      base.country = document.getElementById('f-country').value.trim() || 'United States';
+      base.category = document.getElementById('f-category').value.trim() || 'Technology Vendor';
+      base.annual_contract_value_usd = parseFloat(document.getElementById('f-acv').value) || 100000;
+      base.data_sensitivity = document.getElementById('f-sensitivity').value;
+      base.estimated_records_exposed = parseInt(document.getElementById('f-records').value, 10) || 0;
+      base.service_description = document.getElementById('f-desc').value.trim();
+
+      base.security.soc2_type2_certified = document.getElementById('f-soc2').checked;
+      base.security.iso27001_certified = document.getElementById('f-iso').checked;
+      const mfaSso = document.getElementById('f-mfa').checked;
+      base.security.mfa_enforced = mfaSso;
+      base.security.sso_supported = mfaSso;
+      base.security.ai_model_trains_on_customer_data = document.getElementById('f-aitrain').checked;
+      base.security.open_critical_cves = parseInt(document.getElementById('f-crit-cves').value, 10) || 0;
+
+      base.legal.dpa_signed = document.getElementById('f-dpa').checked;
+      base.legal.sanctions_watchlist_hit = document.getElementById('f-sanctions').checked;
+
+      base.financial.credit_rating_score = parseInt(document.getElementById('f-credit').value, 10) || 75;
+      base.financial.cash_runway_months = parseInt(document.getElementById('f-runway').value, 10) || 24;
+
+      let docs = ["Master Services Agreement (MSA)", "W-9 & Banking Verification"];
+      const encPdfEl = document.getElementById('f-encrypted-pdf');
+      if (encPdfEl && encPdfEl.checked) {
+        docs.push("SOC 2 Type II Report (ENCRYPTED_PDF)");
+      } else if (base.security.soc2_type2_certified) {
+        docs.push("SOC 2 Type II Report");
+      }
+      if (base.security.iso27001_certified) docs.push("ISO 27001 Certificate");
+      if (base.legal.dpa_signed) docs.push("Data Processing Addendum (DPA)");
+      if (base.security.recent_pentest_completed) docs.push("Penetration Test Summary");
+      base.submitted_documents = docs;
+
+      return base;
+    }
+
+    function redactPiiBrowser(text) {
+      if (!text) return { scrubbed: text, count: 0 };
+      let count = 0;
+      let out = text.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, () => { count++; return '[REDACTED_EMAIL]'; });
+      out = out.replace(/(?:\+?1[-.\s]?)?(?:\(\d{3}\)|\d{3})[-.\s]\d{3}[-.\s]\d{4}\b/g, () => { count++; return '[REDACTED_PHONE]'; });
+      out = out.replace(/\b(?:\d{3}-\d{2}-\d{4}|\d{2}-\d{7})\b/g, () => { count++; return '[REDACTED_TAX_ID]'; });
+      out = out.replace(/\b(contact|signed by|representative|submitted by|sponsor|officer|user)\s*:\s*([A-Z][a-z]+\s+[A-Z][a-z]+)/gi, (m, p1) => { count++; return `${p1}: [REDACTED_NAME]`; });
+      return { scrubbed: out, count };
+    }
+
+    function scoreColorClass(score) {
+      if (score >= 60) return 'text-rose-400 border-rose-500/40 bg-rose-500/10';
+      if (score >= 30) return 'text-amber-300 border-amber-500/40 bg-amber-500/10';
+      return 'text-emerald-400 border-emerald-500/40 bg-emerald-500/10';
+    }
+
+    function renderPipelineNodes() {
+      const grid = document.getElementById('agent-pipeline-grid');
+      grid.innerHTML = AGENT_PHASES.map((p) => {
+        const st = phaseStates[p.id] || { status: 'PENDING' };
+        let cardBorder = 'border-slate-800 bg-slate-950/60';
+        let statusPill = '<span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400">IDLE</span>';
+        let scoreDisplay = '<span class="text-xs text-slate-500">—</span>';
+
+        if (st.status === 'RUNNING') {
+          cardBorder = 'border-sky-500 bg-sky-950/20 agent-running';
+          statusPill = '<span class="text-[10px] px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 font-semibold">ACTIVE</span>';
+          scoreDisplay = '<span class="text-xs text-sky-300 animate-pulse">Evaluating...</span>';
+        } else if (st.status === 'COMPLETED' && st.data) {
+          const sc = st.data.risk_score;
+          const findCount = (st.data.findings || []).length;
+          cardBorder = 'border-slate-700 bg-slate-950 hover:border-sky-500/50 cursor-pointer';
+          statusPill = `<span class="text-[10px] px-2 py-0.5 rounded font-semibold ${scoreColorClass(sc)}">Risk: ${sc}</span>`;
+          scoreDisplay = `<span class="text-[11px] text-slate-400">${findCount} finding${findCount === 1 ? '' : 's'} • ${(st.data.tool_calls || []).length} tool${(st.data.tool_calls || []).length === 1 ? '' : 's'}</span>`;
+        }
+
+        return `
+          <div onclick="scrollToAgentCard('${p.id}')" class="p-3.5 rounded-xl border transition flex flex-col justify-between ${cardBorder}">
+            <div>
+              <div class="flex items-center justify-between gap-1 mb-1.5">
+                <span class="text-[10px] uppercase tracking-wider font-semibold text-slate-400">${p.step}</span>
+                ${statusPill}
+              </div>
+              <div class="font-semibold text-xs text-white leading-snug">${p.name}</div>
+              <div class="text-[11px] text-slate-400 mt-0.5">${p.role}</div>
+            </div>
+            <div class="mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-between">
+              ${scoreDisplay}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function executeOnboardingStream() {
+      const btn = document.getElementById('run-btn');
+      btn.disabled = true;
+      btn.classList.add('opacity-60');
+
+      const vendorPayload = buildVendorPayloadFromForm();
+      phaseStates = {};
+      AGENT_PHASES.forEach(p => { phaseStates[p.id] = { status: 'PENDING' }; });
+      renderPipelineNodes();
+
+      document.getElementById('decision-banner').classList.add('hidden');
+      document.getElementById('tab-agents').innerHTML = '';
+      document.getElementById('pipeline-live-status').textContent = `Starting Sequential Pipeline (Extraction → Policy Check) for ${vendorPayload.name}...`;
+
+      try {
+        if (backendAvailable) {
+          const response = await fetch('/api/onboarding/stream?step_delay_ms=250', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(vendorPayload)
+          });
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const parts = buffer.split('\n\n');
+            buffer = parts.pop();
+
+            for (const rawEvent of parts) {
+              const line = rawEvent.trim();
+              if (!line.startsWith('data:')) continue;
+              const payload = JSON.parse(line.slice(5).trim());
+              handleStreamEvent(payload);
+            }
+          }
+        } else {
+          await runLocalBrowserSimulation(vendorPayload);
+        }
+      } catch (err) {
+        console.error('Stream error, falling back to browser runtime:', err);
+        await runLocalBrowserSimulation(vendorPayload);
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove('opacity-60');
+      }
+    }
+
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+    async function runLocalBrowserSimulation(v) {
+      const nowIso = () => new Date().toISOString();
+      const assessmentId = 'ASM-' + Math.random().toString(16).substring(2, 10).toUpperCase();
+
+      // Phase 1: Intake & Certification Extraction (Flash Model)
+      handleStreamEvent({ event: 'phase_started', phase_id: 'intake', agent_name: 'Intake & Extraction Agent [gemini-2.5-flash]' });
+      await sleep(220);
+      let inherent = 10;
+      if (v.data_sensitivity === 'RESTRICTED_PII_PHI_PCI') inherent += 40;
+      else if (v.data_sensitivity === 'CONFIDENTIAL_INTERNAL') inherent += 25;
+      else if (v.data_sensitivity === 'INTERNAL_NON_SENSITIVE') inherent += 12;
+      if (v.requires_network_integration) inherent += 20;
+      if (v.estimated_records_exposed >= 500000) inherent += 18;
+      else if (v.estimated_records_exposed >= 100000) inherent += 14;
+      else if (v.estimated_records_exposed > 0) inherent += 8;
+      if (v.annual_contract_value_usd >= 500000) inherent += 12;
+      else if (v.annual_contract_value_usd >= 150000) inherent += 8;
+      else if (v.annual_contract_value_usd >= 50000) inherent += 4;
+      inherent = Math.min(100, inherent);
+      const tier = inherent >= 75 ? 'TIER_1_CRITICAL' : inherent >= 50 ? 'TIER_2_HIGH' : inherent >= 28 ? 'TIER_3_MEDIUM' : 'TIER_4_LOW';
+      const isHighTier = tier === 'TIER_1_CRITICAL' || tier === 'TIER_2_HIGH';
+      const intakeFindings = [];
+
+      const hasEncryptedPdf = (v.submitted_documents || []).some(d => d.toLowerCase().includes('encrypted'));
+      let extractSummary = `Extracted certs: ${v.security.soc2_type2_certified ? 'SOC 2 Type II' : 'None'}, ${v.security.iso27001_certified ? 'ISO 27001' : ''}`;
+      if (hasEncryptedPdf) {
+        const guidedMsg = "Error: PDF encrypted ('SOC 2 Type II Report (ENCRYPTED_PDF)'). Ask the vendor for the password or an unlocked compliance copy.";
+        extractSummary = `GUIDED_ERROR_RECOVERY_REQUIRED -> ${guidedMsg}`;
+        intakeFindings.push({
+          finding_id: 'EXT-01', phase: 'intake', agent_name: 'Intake & Extraction Agent',
+          title: 'Guided Document Extraction Error (Encrypted PDF)',
+          description: guidedMsg,
+          severity: 'HIGH', category: 'Document Extraction & Guided Error Handling',
+          recommendation: guidedMsg
+        });
+      }
+
+      if (isHighTier && !(v.security.soc2_type2_certified || v.security.iso27001_certified)) {
+        intakeFindings.push({
+          finding_id: 'INT-01', phase: 'intake', agent_name: 'Intake & Extraction Agent',
+          title: 'Missing Mandatory Tier 1/2 Security Audit Artifact',
+          description: 'High-criticality vendor packet is missing SOC 2 Type II or ISO 27001 attestation.',
+          severity: 'HIGH', category: 'Onboarding Documentation',
+          recommendation: 'Collect independent audit certification before production data ingestion.'
+        });
+      }
+      const intakeAssessment = {
+        phase_id: 'intake', phase_name: 'Phase 1: Document Extraction & Criticality Triage (Sequential Step 1)',
+        agent_name: 'Intake & Extraction Agent', agent_role: 'Certification Extraction & Inherent Risk Tiering [Flash Model]',
+        risk_score: inherent, llm_mode_used: 'gemini-2.5-flash (flash-fast)',
+        summary: `[Sequential Pattern: Extraction -> Policy Check] ${extractSummary}. Profiled ${v.name} (${v.category}) as ${tier} with an Inherent Risk Score of ${inherent}/100 based on ${v.data_sensitivity} exposure (${v.estimated_records_exposed.toLocaleString()} records) and $${v.annual_contract_value_usd.toLocaleString()} ACV.`,
+        findings: intakeFindings,
+        tool_calls: [
+          { tool_name: 'extract_vendor_security_certifications', output_summary: extractSummary },
+          { tool_name: 'classify_criticality_tier', output_summary: `Assigned ${tier} (Inherent Risk: ${inherent}/100)` }
+        ]
+      };
+      handleStreamEvent({ event: 'phase_completed', phase_id: 'intake', assessment: intakeAssessment });
+
+      // Phase 2: InfoSec & Constitutional Policy Check (Pro Reasoning Model)
+      handleStreamEvent({ event: 'phase_started', phase_id: 'infosec', agent_name: 'InfoSec & Policy Checking Agent [gemini-2.5-pro]' });
+      await sleep(240);
+      let secScore = 8;
+      const secFindings = [];
+      if (isHighTier && !(v.security.soc2_type2_certified || v.security.iso27001_certified)) {
+        secScore += 32;
+        secFindings.push({
+          finding_id: 'SEC-01', phase: 'infosec', agent_name: 'InfoSec & Policy Checking Agent',
+          title: 'Constitutional Violation (Article I): Missing SOC 2 Type II / ISO 27001',
+          description: `${v.name} is classified as ${tier} but lacks SOC 2 Type II and ISO 27001 certification.`,
+          severity: 'CRITICAL', category: 'Audit & Certifications',
+          recommendation: 'Require valid SOC 2 Type II report or ISO 27001 certification prior to production onboarding.'
+        });
+      } else if ((v.security.soc2_exceptions || []).length > 0) {
+        secScore += 10;
+        secFindings.push({
+          finding_id: 'SEC-02', phase: 'infosec', agent_name: 'InfoSec & Policy Checking Agent',
+          title: 'SOC 2 Type II Audit Exception Identified',
+          description: v.security.soc2_exceptions.join('; '),
+          severity: 'MEDIUM', category: 'Access Control & Audit',
+          recommendation: 'Obtain formal management response and evidence of remediated quarterly access reviews.'
+        });
+      }
+      if (isHighTier && (!v.security.mfa_enforced || !v.security.sso_supported)) {
+        secScore += 15;
+        secFindings.push({
+          finding_id: 'SEC-04', phase: 'infosec', agent_name: 'InfoSec & Policy Checking Agent',
+          title: 'Constitutional Violation (Article II): Inadequate MFA / Enterprise SSO',
+          description: `MFA enforced=${v.security.mfa_enforced}, SSO=${v.security.sso_supported}.`,
+          severity: 'HIGH', category: 'Identity & Access Management',
+          recommendation: 'Enforce mandatory MFA and SAML/OIDC SSO for all tenant accounts.'
+        });
+      }
+      if (v.security.open_critical_cves > 0) {
+        secScore += Math.min(35, v.security.open_critical_cves * 18);
+        secFindings.push({
+          finding_id: 'SEC-05', phase: 'infosec', agent_name: 'InfoSec & Policy Checking Agent',
+          title: `Constitutional Violation (Article II): Unpatched Critical CVEs (${v.security.open_critical_cves})`,
+          description: `Pentest scan identified ${v.security.open_critical_cves} open Critical CVEs.`,
+          severity: 'CRITICAL', category: 'Vulnerability Management',
+          recommendation: 'Block production network onboarding until all Critical CVEs are patched and verified.'
+        });
+      } else if ((v.security.open_high_cves || 0) > 0) {
+        secScore += 7;
+        secFindings.push({
+          finding_id: 'SEC-06', phase: 'infosec', agent_name: 'InfoSec & Policy Checking Agent',
+          title: `Open High-Severity Pentest Finding (${v.security.open_high_cves} High CVE)`,
+          description: 'Recent penetration test noted open High-severity vulnerability pending patch.',
+          severity: 'MEDIUM', category: 'Vulnerability Management',
+          recommendation: 'Require remediation patch verification within 30 days.'
+        });
+      }
+      if (v.security.ai_model_trains_on_customer_data && v.data_sensitivity !== 'PUBLIC_ONLY') {
+        secScore += 22;
+        secFindings.push({
+          finding_id: 'SEC-08', phase: 'infosec', agent_name: 'InfoSec & Policy Checking Agent',
+          title: 'Constitutional Violation (Article III): Unauthorized AI Training on Customer Data',
+          description: 'Vendor terms allow customer data/telemetry to train shared ML models.',
+          severity: 'CRITICAL', category: 'AI & Data Governance',
+          recommendation: 'Enforce strict zero-data-retention and AI training opt-out addendum.'
+        });
+      }
+      secScore = Math.min(100, secScore);
+      const infosecAssessment = {
+        phase_id: 'infosec', phase_name: 'Phase 2: InfoSec & Constitutional Policy Check (Sequential Step 2)',
+        agent_name: 'InfoSec & Policy Checking Agent', agent_role: 'Constitutional Security Policy Evaluator (Articles I-III) [Pro Reasoning Model]',
+        risk_score: secScore, llm_mode_used: 'gemini-2.5-pro (pro-reasoning)',
+        summary: `[Constitutional Policy Check] InfoSec assessment of ${v.name} resulted in a Cyber Risk Score of ${secScore}/100 with ${secFindings.length} finding(s). SOC2=${v.security.soc2_type2_certified}, ISO27001=${v.security.iso27001_certified}, Critical CVEs=${v.security.open_critical_cves}.`,
+        findings: secFindings,
+        tool_calls: [
+          { tool_name: 'verify_security_certifications_and_iam', output_summary: `SOC2=${v.security.soc2_type2_certified}, ISO27001=${v.security.iso27001_certified}, MFA=${v.security.mfa_enforced}` },
+          { tool_name: 'scan_vulnerabilities_and_ai_governance', output_summary: `Computed InfoSec Score: ${secScore}/100 (${secFindings.length} findings)` }
+        ]
+      };
+      handleStreamEvent({ event: 'phase_completed', phase_id: 'infosec', assessment: infosecAssessment });
+
+      // Phase 3: Legal
+      handleStreamEvent({ event: 'phase_started', phase_id: 'legal', agent_name: 'Legal, Privacy & Regulatory Agent' });
+      await sleep(240);
+      let legScore = 5;
+      const legFindings = [];
+      if (v.legal.sanctions_watchlist_hit) {
+        legScore += 50;
+        legFindings.push({
+          finding_id: 'LEG-01', phase: 'legal', agent_name: 'Legal, Privacy & Regulatory Agent',
+          title: 'OFAC / Global Sanctions Watchlist Match Detected',
+          description: `Entity or affiliated subsidiary of ${v.name} (${v.country}) triggered an OFAC sanctions match.`,
+          severity: 'CRITICAL', category: 'Sanctions & KYC/AML',
+          recommendation: 'Immediate compliance hold; escalate to General Counsel & OFAC Trade Compliance.'
+        });
+      }
+      if (v.data_sensitivity === 'RESTRICTED_PII_PHI_PCI' && !v.legal.dpa_signed) {
+        legScore += 25;
+        legFindings.push({
+          finding_id: 'LEG-03', phase: 'legal', agent_name: 'Legal, Privacy & Regulatory Agent',
+          title: 'Missing Executed Data Processing Addendum (DPA)',
+          description: 'Vendor processes Restricted PII/PHI/PCI without a signed DPA.',
+          severity: 'CRITICAL', category: 'Data Privacy',
+          recommendation: 'Execute standard enterprise DPA with subprocessor flow-down obligations.'
+        });
+      }
+      if (v.legal.cross_border_transfers && !v.legal.scc_mechanism_in_place && v.data_sensitivity === 'RESTRICTED_PII_PHI_PCI') {
+        legScore += 18;
+        legFindings.push({
+          finding_id: 'LEG-04', phase: 'legal', agent_name: 'Legal, Privacy & Regulatory Agent',
+          title: 'Cross-Border Data Transfer Missing EU/UK SCCs & TIA',
+          description: `${v.name} performs cross-border transfers without executed Standard Contractual Clauses (SCCs).`,
+          severity: 'HIGH', category: 'International Privacy (GDPR Chapter V)',
+          recommendation: 'Attach 2021 EU Standard Contractual Clauses (Module 2) and UK IDTA addendum.'
+        });
+      }
+      if ((v.legal.liability_cap_multiplier || 2) < 2.0 && isHighTier) {
+        legScore += 10;
+        legFindings.push({
+          finding_id: 'LEG-06', phase: 'legal', agent_name: 'Legal, Privacy & Regulatory Agent',
+          title: `Below-Standard Super-Cap Liability Limit (${v.legal.liability_cap_multiplier}x ACV)`,
+          description: 'Proposed liability cap is below enterprise policy minimum (2.0x ACV) for high-criticality vendors.',
+          severity: 'MEDIUM', category: 'Contractual Liability',
+          recommendation: 'Negotiate data privacy super-cap to at least 2.0x annual contract value.'
+        });
+      }
+      legScore = Math.min(100, legScore);
+      const legalAssessment = {
+        phase_id: 'legal', phase_name: 'Phase 3: Legal, Privacy & Sanctions Screening',
+        agent_name: 'Legal, Privacy & Regulatory Agent', agent_role: 'MSA/DPA Counsel, GDPR/CCPA Privacy & OFAC Sanctions Specialist',
+        risk_score: legScore, llm_mode_used: 'simulation',
+        summary: `Legal & Regulatory screening of ${v.name} (${v.country}) produced a Risk Score of ${legScore}/100 with ${legFindings.length} finding(s). Sanctions Hit=${v.legal.sanctions_watchlist_hit}, DPA Signed=${v.legal.dpa_signed}.`,
+        findings: legFindings,
+        tool_calls: [
+          { tool_name: 'screen_ofac_sanctions_and_adverse_media', output_summary: `Sanctions Hit=${v.legal.sanctions_watchlist_hit}` },
+          { tool_name: 'audit_privacy_dpa_and_contract_clauses', output_summary: `Computed Legal Score: ${legScore}/100 (${legFindings.length} findings)` }
+        ]
+      };
+      handleStreamEvent({ event: 'phase_completed', phase_id: 'legal', assessment: legalAssessment });
+
+      // Phase 4: Financial
+      handleStreamEvent({ event: 'phase_started', phase_id: 'financial', agent_name: 'Financial & Operational Viability Agent' });
+      await sleep(240);
+      let finScore = 6;
+      const finFindings = [];
+      if (v.financial.cash_runway_months < 12 || v.financial.credit_rating_score < 55) {
+        finScore += 30;
+        finFindings.push({
+          finding_id: 'FIN-01', phase: 'financial', agent_name: 'Financial & Operational Viability Agent',
+          title: `Elevated Financial Distress & Liquidity Risk (Runway: ${v.financial.cash_runway_months}m, Credit: ${v.financial.credit_rating_score}/100)`,
+          description: 'Vendor exhibits short liquidity runway and weak credit rating.',
+          severity: 'HIGH', category: 'Financial Solvency',
+          recommendation: 'Include source-code/data escrow clause and quarterly financial covenant reporting.'
+        });
+      }
+      if (isHighTier && (!v.financial.bcp_dr_tested_annually || v.financial.rto_hours > 8)) {
+        finScore += 24;
+        finFindings.push({
+          finding_id: 'FIN-03', phase: 'financial', agent_name: 'Financial & Operational Viability Agent',
+          title: `Unverified Business Continuity / Excessive Recovery Time (RTO: ${v.financial.rto_hours}h)`,
+          description: 'Disaster recovery RTO exceeds Tier 1/2 policy threshold of 8 hours.',
+          severity: 'HIGH', category: 'Business Continuity & DR',
+          recommendation: 'Require documented annual DR failover test with RTO <= 4 hours.'
+        });
+      }
+      finScore = Math.min(100, finScore);
+      const finAssessment = {
+        phase_id: 'financial', phase_name: 'Phase 4: Financial & Operational Viability',
+        agent_name: 'Financial & Operational Viability Agent', agent_role: 'Credit Solvency, Business Continuity (BCP/DR) & SLA Analyst',
+        risk_score: finScore, llm_mode_used: 'simulation',
+        summary: `Financial & Operational review of ${v.name} yielded a Risk Score of ${finScore}/100 with ${finFindings.length} finding(s). Credit=${v.financial.credit_rating_score}/100, Runway=${v.financial.cash_runway_months}m.`,
+        findings: finFindings,
+        tool_calls: [
+          { tool_name: 'analyze_financial_solvency_and_credit', output_summary: `Credit=${v.financial.credit_rating_score}/100, Runway=${v.financial.cash_runway_months}m` },
+          { tool_name: 'verify_bcp_dr_and_sla_resilience', output_summary: `Computed Financial Score: ${finScore}/100` }
+        ]
+      };
+      handleStreamEvent({ event: 'phase_completed', phase_id: 'financial', assessment: finAssessment });
+
+      // Phase 5: Compliance Officer
+      handleStreamEvent({ event: 'phase_started', phase_id: 'compliance_officer', agent_name: 'Risk Aggregator & Compliance Officer Agent' });
+      await sleep(240);
+      const allFindings = [...intakeFindings, ...secFindings, ...legFindings, ...finFindings];
+      const critCount = allFindings.filter(f => f.severity === 'CRITICAL').length;
+      const highCount = allFindings.filter(f => f.severity === 'HIGH').length;
+      const composite = Number(((secScore * 0.38) + (legScore * 0.32) + (finScore * 0.20) + ((intakeFindings.length * 25) * 0.10)).toFixed(1));
+      const residualLevel = (composite >= 65 || critCount >= 2) ? 'CRITICAL' : (composite >= 40 || critCount === 1 || highCount >= 2) ? 'HIGH' : (composite >= 18 || allFindings.length > 0) ? 'MEDIUM' : 'LOW';
+      const decision = (v.legal.sanctions_watchlist_hit || composite >= 65 || critCount >= 2)
+        ? 'REJECTED'
+        : (critCount === 1 || composite >= 45)
+          ? 'ESCALATED_FOR_HUMAN_REVIEW'
+          : (allFindings.length > 0 || composite >= 18)
+            ? 'APPROVED_WITH_CONDITIONS'
+            : 'APPROVED';
+
+      const remPlan = allFindings.map((f, i) => ({
+        action_id: `REM-0${i + 1}`,
+        owner: f.phase === 'infosec' ? 'CISO / Security Engineering' : f.phase === 'legal' ? 'Privacy & Legal Counsel' : 'Procurement & Resilience Lead',
+        priority: f.severity,
+        requirement: `[${f.finding_id}] ${f.recommendation}`,
+        due_timeline: (f.severity === 'CRITICAL' || f.severity === 'HIGH') ? 'Prior to Production Go-Live (Blocking)' : 'Within 30 Days Post-Onboarding',
+        blocking_go_live: f.severity === 'CRITICAL' || f.severity === 'HIGH'
+      }));
+
+      const memo = `FINAL ONBOARDING DETERMINATION: ${decision.replace(/_/g, ' ')} for ${v.name} (${tier}, Composite Residual Risk: ${composite}/100 — ${residualLevel}). Domain Breakdown: InfoSec=${secScore}/100, Legal/Privacy=${legScore}/100, Financial/Ops=${finScore}/100. ` +
+        (allFindings.length === 0 ? 'All mandatory security, privacy, sanctions, and operational resilience gates passed without exception.' : `Identified ${allFindings.length} finding(s) requiring ${remPlan.length} tracked remediation action(s).`);
+
+      const officerAssessment = {
+        phase_id: 'compliance_officer', phase_name: 'Phase 5: Final Risk Aggregation & Executive Sign-Off',
+        agent_name: 'Risk Aggregator & Compliance Officer Agent', agent_role: 'Chief Compliance Officer Synthesis, Residual Risk Scoring & Governance Sign-Off',
+        risk_score: composite, llm_mode_used: 'simulation', summary: memo, findings: [],
+        tool_calls: [{ tool_name: 'calculate_composite_risk_and_decision', output_summary: `Composite=${composite}/100 (${residualLevel}) -> ${decision}` }]
+      };
+      handleStreamEvent({ event: 'phase_completed', phase_id: 'compliance_officer', assessment: officerAssessment });
+
+      const strengths = [];
+      if (v.security.soc2_type2_certified) strengths.push('Active SOC 2 Type II attestation verified');
+      if (v.security.iso27001_certified) strengths.push('ISO/IEC 27001:2022 certified information security management');
+      if (!v.legal.sanctions_watchlist_hit) strengths.push('Clean global OFAC sanctions screening');
+      if (v.financial.credit_rating_score >= 75) strengths.push(`Healthy financial solvency (Credit ${v.financial.credit_rating_score}/100, ${v.financial.cash_runway_months}m runway)`);
+
+      const fullResult = {
+        assessment_id: assessmentId,
+        vendor: v,
+        all_findings: allFindings,
+        final_decision: {
+          decision,
+          composite_risk_score: composite,
+          residual_risk_level: residualLevel,
+          criticality_tier: tier,
+          executive_memo: memo,
+          key_strengths: strengths,
+          critical_blockers: allFindings.filter(f => f.severity === 'CRITICAL' || f.severity === 'HIGH').map(f => `${f.finding_id}: ${f.title}`),
+          remediation_plan: remPlan
+        },
+        audit_trail: [
+          { timestamp: nowIso(), agent: 'Intake & Triage Agent', event: `Assigned ${tier} (Inherent Risk: ${inherent}/100)`, risk_score: inherent },
+          { timestamp: nowIso(), agent: 'InfoSec & Cyber Risk Agent', event: `Completed Cyber Risk Audit (Findings: ${secFindings.length})`, risk_score: secScore },
+          { timestamp: nowIso(), agent: 'Legal, Privacy & Regulatory Agent', event: `Completed Legal & OFAC Screening (Findings: ${legFindings.length})`, risk_score: legScore },
+          { timestamp: nowIso(), agent: 'Financial & Operational Viability Agent', event: `Completed Financial & BCP Review (Findings: ${finFindings.length})`, risk_score: finScore },
+          { timestamp: nowIso(), agent: 'Risk Aggregator & Compliance Officer Agent', event: `Issued Final Decision: ${decision}`, risk_score: composite }
+        ]
+      };
+      handleStreamEvent({ event: 'pipeline_completed', result: fullResult });
+    }
+
+    function handleStreamEvent(ev) {
+      if (ev.event === 'phase_started') {
+        phaseStates[ev.phase_id] = { status: 'RUNNING' };
+        document.getElementById('pipeline-live-status').textContent = `${ev.agent_name} is executing...`;
+        renderPipelineNodes();
+      } else if (ev.event === 'phase_completed') {
+        phaseStates[ev.phase_id] = { status: 'COMPLETED', data: ev.assessment };
+        renderPipelineNodes();
+        appendAgentReportCard(ev.assessment);
+      } else if (ev.event === 'pipeline_completed') {
+        currentAssessment = ev.result;
+        document.getElementById('pipeline-live-status').textContent = `Completed (${currentAssessment.assessment_id})`;
+        renderFullAssessmentResults(currentAssessment);
+      }
+    }
+
+    function appendAgentReportCard(a) {
+      const container = document.getElementById('tab-agents');
+      const findingsHtml = (a.findings || []).length === 0
+        ? `<div class="text-xs text-emerald-400 bg-emerald-950/30 border border-emerald-800/40 rounded-lg px-3 py-2">No compliance exceptions or risk findings triggered in this phase.</div>`
+        : (a.findings || []).map(f => {
+            const sevColors = {
+              CRITICAL: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
+              HIGH: 'bg-orange-500/20 text-orange-300 border-orange-500/40',
+              MEDIUM: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+              LOW: 'bg-sky-500/20 text-sky-300 border-sky-500/40'
+            };
+            return `
+              <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-xs font-semibold text-white">[${f.finding_id}] ${f.title}</span>
+                  <span class="text-[10px] font-bold px-2 py-0.5 rounded border ${sevColors[f.severity] || ''}">${f.severity}</span>
+                </div>
+                <p class="text-xs text-slate-400">${f.description}</p>
+                <div class="text-xs text-sky-300 pt-1"><span class="font-semibold text-slate-400">Remediation:</span> ${f.recommendation}</div>
+              </div>
+            `;
+          }).join('');
+
+      const toolsHtml = (a.tool_calls || []).map(t => `
+        <div class="text-[11px] font-mono bg-slate-950/90 border border-slate-800/90 rounded-lg px-3 py-2 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <span class="text-sky-400 font-semibold">tool:${t.tool_name}()</span>
+            <span class="text-slate-400 ml-2">${t.output_summary}</span>
+          </div>
+          <span class="text-slate-500">verified</span>
+        </div>
+      `).join('');
+
+      const cardHtml = `
+        <div id="agent-card-${a.phase_id}" class="p-5 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div class="text-xs font-semibold uppercase tracking-wider text-sky-400">${a.phase_name}</div>
+              <h3 class="text-base font-bold text-white">${a.agent_name} <span class="text-xs font-normal text-slate-400">— ${a.agent_role}</span></h3>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs px-2.5 py-1 rounded-lg border font-semibold ${scoreColorClass(a.risk_score)}">
+                Phase Risk Score: ${a.risk_score}/100
+              </span>
+              <span class="text-[11px] px-2 py-1 rounded bg-slate-900 border border-slate-800 text-slate-400">
+                ${a.llm_mode_used}
+              </span>
+            </div>
+          </div>
+
+          <p class="text-sm text-slate-200 leading-relaxed bg-slate-900/90 p-3.5 rounded-xl border border-slate-800/80">
+            ${a.summary}
+          </p>
+
+          <div class="space-y-1.5">
+            <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Tool Call Telemetry</div>
+            ${toolsHtml}
+          </div>
+
+          <div class="space-y-2 pt-1">
+            <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Phase Risk Findings (${(a.findings || []).length})</div>
+            ${findingsHtml}
+          </div>
+        </div>
+      `;
+      container.insertAdjacentHTML('beforeend', cardHtml);
+    }
+
+    function renderFullAssessmentResults(res) {
+      const dec = res.final_decision;
+      const banner = document.getElementById('decision-banner');
+      banner.classList.remove('hidden');
+
+      const badgeMap = {
+        APPROVED: {
+          bg: 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300',
+          label: 'APPROVED FOR ONBOARDING'
+        },
+        APPROVED_WITH_CONDITIONS: {
+          bg: 'bg-amber-500/15 border-amber-500/40 text-amber-300',
+          label: 'APPROVED WITH REMEDIATION CONDITIONS'
+        },
+        ESCALATED_FOR_HUMAN_REVIEW: {
+          bg: 'bg-orange-500/15 border-orange-500/40 text-orange-300',
+          label: 'ESCALATED FOR HUMAN GOVERNANCE REVIEW'
+        },
+        REJECTED: {
+          bg: 'bg-rose-500/15 border-rose-500/40 text-rose-300',
+          label: 'ONBOARDING REJECTED — UNACCEPTABLE RISK'
+        }
+      };
+      const st = badgeMap[dec.decision] || badgeMap.ESCALATED_FOR_HUMAN_REVIEW;
+
+      const overrideNotice = dec.human_override ? `
+        <div class="mt-3 p-3 rounded-xl bg-indigo-500/15 border border-indigo-500/40 text-xs text-indigo-200">
+          <strong>Human Governance Override Applied:</strong> ${dec.human_override.reviewer_name} changed decision from
+          <span class="font-mono">${dec.human_override.previous_decision}</span> to
+          <span class="font-mono font-bold">${dec.human_override.new_decision}</span> — "${dec.human_override.notes}"
+        </div>
+      ` : '';
+
+      banner.innerHTML = `
+        <div class="flex flex-wrap items-start justify-between gap-4 border-b border-slate-800 pb-4">
+          <div>
+            <div class="flex items-center gap-2.5">
+              <span class="px-3 py-1 rounded-full text-xs font-bold border ${st.bg}">
+                ${st.label}
+              </span>
+              <span class="text-xs px-2.5 py-1 rounded bg-slate-800 text-slate-300 font-mono">
+                ${dec.criticality_tier}
+              </span>
+              <span class="text-xs text-slate-400">ID: ${res.assessment_id}</span>
+            </div>
+            <h2 class="text-xl font-bold text-white mt-2">${res.vendor.name} — Executive Compliance Determination</h2>
+          </div>
+
+          <div class="flex items-center gap-4 bg-slate-950 px-4 py-2.5 rounded-xl border border-slate-800">
+            <div>
+              <div class="text-[10px] uppercase tracking-wider text-slate-400">Composite Residual Risk</div>
+              <div class="text-2xl font-extrabold text-white">${dec.composite_risk_score}<span class="text-xs font-normal text-slate-400">/100 (${dec.residual_risk_level})</span></div>
+            </div>
+          </div>
+        </div>
+
+        <p class="mt-4 text-sm text-slate-200 leading-relaxed">${dec.executive_memo}</p>
+        ${overrideNotice}
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-800 text-xs">
+          <div>
+            <div class="font-semibold text-emerald-400 uppercase tracking-wider mb-1.5">Verified Control Strengths</div>
+            <ul class="space-y-1 text-slate-300 list-disc list-inside">
+              ${(dec.key_strengths || []).map(s => `<li>${s}</li>`).join('') || '<li>No notable strengths verified</li>'}
+            </ul>
+          </div>
+          <div>
+            <div class="font-semibold text-rose-400 uppercase tracking-wider mb-1.5">Critical & High Blockers (${(dec.critical_blockers || []).length})</div>
+            <ul class="space-y-1 text-slate-300 list-disc list-inside">
+              ${(dec.critical_blockers || []).map(b => `<li>${b}</li>`).join('') || '<li class="text-emerald-400">Zero Critical or High blockers identified</li>'}
+            </ul>
+          </div>
+        </div>
+
+        <!-- Human-in-the-Loop (HITL) Code Stop Hook -->
+        <div class="mt-5 pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-950/70 p-3.5 rounded-xl">
+          <div class="text-xs">
+            <span class="font-semibold text-white">Human-in-the-Loop (HITL) Code Stop Hook:</span>
+            <span class="text-slate-400 ml-1">
+              ${(dec.residual_risk_level === 'HIGH' || dec.residual_risk_level === 'CRITICAL')
+                ? '<span class="text-rose-400 font-semibold">[CODE STOP ACTIVE: High/Critical Risk — Type "approve" or "reject" to finalize]</span>'
+                : 'Type "approve" or "reject" (or click a governance action)'}
+            </span>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <input id="hitl-command" type="text" placeholder="Type 'approve' or 'reject'..." class="text-xs font-mono bg-slate-900 border border-sky-500/50 rounded-lg px-3 py-1.5 text-white w-44" />
+            <button onclick="executeHitlCommand()" class="text-xs px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 font-semibold">
+              Submit Command
+            </button>
+            <button onclick="submitHumanOverride('APPROVED')" class="text-xs px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 font-medium">
+              Approve
+            </button>
+            <button onclick="submitHumanOverride('REJECTED')" class="text-xs px-2.5 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 font-medium">
+              Reject
+            </button>
+          </div>
+        </div>
+      `;
+
+      const allFindings = res.all_findings || [];
+      const remPlan = dec.remediation_plan || [];
+      document.getElementById('count-findings').textContent = allFindings.length;
+      document.getElementById('count-remediation').textContent = remPlan.length;
+
+      renderFindingsTab(allFindings);
+      renderRemediationTab(remPlan);
+      renderAuditTab(res.audit_trail || []);
+    }
+
+    function executeHitlCommand() {
+      const cmdInput = document.getElementById('hitl-command');
+      const val = (cmdInput ? cmdInput.value.trim().toLowerCase() : '');
+      if (val === 'approve') {
+        submitHumanOverride('APPROVED', "HITL Code Stop resolved via terminal command: 'approve'");
+      } else if (val === 'reject') {
+        submitHumanOverride('REJECTED', "HITL Code Stop resolved via terminal command: 'reject'");
+      } else {
+        alert("Please type 'approve' or 'reject' to resolve the Human-in-the-Loop Code Stop.");
+      }
+    }
+
+    let browserSessionHistory = [];
+
+    async function sendVendorQuestion() {
+      const qEl = document.getElementById('chat-input');
+      const outEl = document.getElementById('chat-output');
+      const rawQuestion = qEl.value.trim();
+      if (!rawQuestion) return;
+
+      outEl.classList.remove('hidden');
+      const vName = document.getElementById('f-name').value || 'CloudScale AI Inc.';
+      const vId = (selectedVendor && selectedVendor.vendor_id) || 'VND-1001';
+
+      if (backendAvailable) {
+        try {
+          const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ vendor_id: vId, vendor_name: vName, question: rawQuestion })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            outEl.innerHTML = `
+              <div class="flex items-center justify-between text-[11px] text-sky-400 font-mono">
+                <span>Pattern: ${data.intent_routing.pattern}</span>
+                <span>Model: ${data.model_used}</span>
+              </div>
+              <div class="text-[11px] text-amber-300 font-mono bg-amber-950/30 border border-amber-500/30 rounded p-2">
+                <strong>Active PII Redactor (${data.pii_redactions_applied} scrubbed):</strong><br/>${data.original_question_redacted}
+              </div>
+              <div class="text-xs text-slate-200 leading-relaxed pt-1">
+                <strong class="text-emerald-400">Support Agent Reply (Memory Turns: ${data.session_state.conversation_turns_count}):</strong><br/>
+                ${data.reply}
+              </div>
+            `;
+            return;
+          }
+        } catch (_e) {}
+      }
+
+      const pii = redactPiiBrowser(rawQuestion);
+      const status = currentAssessment ? currentAssessment.final_decision.decision : 'IN_REVIEW';
+      const risk = currentAssessment ? currentAssessment.final_decision.residual_risk_level : 'MEDIUM';
+      browserSessionHistory.push({ role: 'vendor', scrubbed: pii.scrubbed });
+      const reply = `Welcome back, ${vName} (${vId}). From your persistent session state (Turn #${browserSessionHistory.length}), your current onboarding status is ${status} (${risk} Risk). Per our Enterprise Security Constitution: (1) Tier 1/2 vendors must hold active SOC 2 Type II or ISO 27001 certification, (2) Zero open Critical CVEs are permitted, and (3) Signed GDPR/CCPA DPA + EU/UK SCCs are required.`;
+
+      outEl.innerHTML = `
+        <div class="flex items-center justify-between text-[11px] text-sky-400 font-mono">
+          <span>Pattern: CONVERSATIONAL (Coordinator → Support)</span>
+          <span>Model: gemini-2.5-flash (flash-fast)</span>
+        </div>
+        <div class="text-[11px] text-amber-300 font-mono bg-amber-950/30 border border-amber-500/30 rounded p-2">
+          <strong>Active PII Redactor (${pii.count} item(s) scrubbed before storage):</strong><br/>${pii.scrubbed}
+        </div>
+        <div class="text-xs text-slate-200 leading-relaxed pt-1">
+          <strong class="text-emerald-400">Support Agent Reply (Persistent Session Turn #${browserSessionHistory.length}):</strong><br/>
+          ${reply}
+        </div>
+      `;
+    }
+
+    function renderFindingsTab(findings) {
+      const el = document.getElementById('tab-findings');
+      if (findings.length === 0) {
+        el.innerHTML = `<div class="text-sm text-emerald-400 py-8 text-center">Zero risk findings identified across all 5 onboarding phases.</div>`;
+        return;
+      }
+      el.innerHTML = `
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="border-b border-slate-800 text-slate-400 uppercase">
+                <th class="py-2.5 px-3">ID</th>
+                <th class="py-2.5 px-3">Severity</th>
+                <th class="py-2.5 px-3">Agent / Domain</th>
+                <th class="py-2.5 px-3">Finding & Description</th>
+                <th class="py-2.5 px-3">Required Remediation</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800/70">
+              ${findings.map(f => `
+                <tr class="hover:bg-slate-950/50">
+                  <td class="py-3 px-3 font-mono font-semibold text-white whitespace-nowrap">${f.finding_id}</td>
+                  <td class="py-3 px-3 whitespace-nowrap"><span class="font-bold text-amber-300">${f.severity}</span></td>
+                  <td class="py-3 px-3 text-slate-300 whitespace-nowrap">${f.agent_name}<br/><span class="text-[10px] text-slate-500">${f.category}</span></td>
+                  <td class="py-3 px-3 text-slate-200"><strong>${f.title}</strong><div class="text-slate-400 mt-0.5">${f.description}</div></td>
+                  <td class="py-3 px-3 text-sky-300">${f.recommendation}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderRemediationTab(items) {
+      const el = document.getElementById('tab-remediation');
+      if (items.length === 0) {
+        el.innerHTML = `<div class="text-sm text-emerald-400 py-8 text-center">No remediation conditions required — vendor cleared for immediate production onboarding.</div>`;
+        return;
+      }
+      el.innerHTML = `
+        <div class="space-y-2.5">
+          ${items.map(r => `
+            <div class="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div class="space-y-1 max-w-2xl">
+                <div class="flex items-center gap-2">
+                  <span class="font-mono font-bold text-sky-400">${r.action_id}</span>
+                  <span class="font-semibold text-white">${r.requirement}</span>
+                </div>
+                <div class="text-slate-400">Owner: <span class="text-slate-200">${r.owner}</span> • Due: <span class="text-amber-300">${r.due_timeline}</span></div>
+              </div>
+              <div>
+                ${r.blocking_go_live
+                  ? '<span class="px-2.5 py-1 rounded bg-rose-500/20 border border-rose-500/40 text-rose-300 font-semibold">BLOCKS GO-LIVE</span>'
+                  : '<span class="px-2.5 py-1 rounded bg-slate-800 text-slate-300">Post-Onboarding</span>'}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function renderAuditTab(trail) {
+      const el = document.getElementById('tab-audit');
+      el.innerHTML = `
+        <div class="space-y-2 text-xs font-mono">
+          ${trail.map(t => `
+            <div class="p-3 rounded-lg bg-slate-950 border border-slate-800 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <span class="text-slate-500">[${new Date(t.timestamp).toLocaleTimeString()}]</span>
+                <span class="text-sky-400 font-semibold ml-2">${t.agent}</span>
+                <span class="text-slate-200 ml-2">${t.event}</span>
+              </div>
+              <span class="text-slate-400">Score: ${t.risk_score}/100</span>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    async function submitHumanOverride(decision, customNotes) {
+      if (!currentAssessment) return;
+      const notes = customNotes || `Executive governance sign-off as ${decision}`;
+
+      if (backendAvailable) {
+        const res = await fetch(`/api/assessments/${currentAssessment.assessment_id}/human-override`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            decision,
+            reviewer_name: 'Chief Compliance Officer',
+            notes
+          })
+        });
+        if (res.ok) {
+          currentAssessment = await res.json();
+          renderFullAssessmentResults(currentAssessment);
+          return;
+        }
+      }
+
+      const prev = currentAssessment.final_decision.decision;
+      currentAssessment.final_decision.decision = decision;
+      currentAssessment.final_decision.human_override = {
+        previous_decision: prev,
+        new_decision: decision,
+        reviewer_name: 'Chief Compliance Officer',
+        notes,
+        overridden_at: new Date().toISOString()
+      };
+      currentAssessment.audit_trail.push({
+        timestamp: new Date().toISOString(),
+        agent: 'Human Reviewer (Chief Compliance Officer)',
+        event: `Resolved HITL Code Stop (${prev} -> ${decision}): ${notes}`,
+        risk_score: currentAssessment.final_decision.composite_risk_score
+      });
+      renderFullAssessmentResults(currentAssessment);
+    }
+
+    function switchTab(tabName) {
+      ['agents', 'findings', 'remediation', 'audit'].forEach(t => {
+        document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== tabName);
+        const btn = document.getElementById(`tab-btn-${t}`);
+        if (t === tabName) {
+          btn.className = 'tab-btn px-4 py-2.5 text-xs font-semibold border-b-2 border-sky-500 text-sky-400';
+        } else {
+          btn.className = 'tab-btn px-4 py-2.5 text-xs font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200';
+        }
+      });
+    }
+
+    function scrollToAgentCard(phaseId) {
+      switchTab('agents');
+      const card = document.getElementById(`agent-card-${phaseId}`);
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card.classList.add('ring-2', 'ring-sky-500');
+        setTimeout(() => card.classList.remove('ring-2', 'ring-sky-500'), 1500);
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', initDashboard);
+  </script>
+</body>
+</html>
