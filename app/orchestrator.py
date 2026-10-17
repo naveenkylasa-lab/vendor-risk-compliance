@@ -1,4 +1,4 @@
-"""Multi-Agent StateGraph Orchestrator with Intent Routing, Strategic Model Routing, HITL Code Stop & PII Redaction."""
+"""Multi-Agent StateGraph Orchestrator with OpenTelemetry Distributed Tracing & Async Background Memory."""
 
 from __future__ import annotations
 
@@ -12,7 +12,11 @@ from app.agents.financial_agent import run_financial_agent
 from app.agents.infosec_agent import run_infosec_agent
 from app.agents.intake_agent import run_intake_agent
 from app.agents.legal_agent import run_legal_agent
-from app.agents.support_agent import classify_vendor_intent, handle_vendor_question
+from app.agents.support_agent import (
+    ahandle_vendor_question,
+    classify_vendor_intent,
+    handle_vendor_question,
+)
 from app.llm_client import llm_client
 from app.memory_store import memory_store
 from app.models import (
@@ -26,7 +30,7 @@ from app.models import (
     RiskSeverity,
     VendorSubmission,
 )
-from app.observability import redact_pii_text, tracer
+from app.observability import redact_pii_text, start_otel_span, tracer
 
 try:
     from langgraph.graph import END, START, StateGraph
@@ -59,12 +63,12 @@ def _record_redacted_audit(
     raw_event: str,
     risk_score: float,
 ) -> Dict[str, Any]:
-    """Scrubs PII from vendor descriptions/sponsors before recording audit trail entries."""
+    """Scrubs PII from vendor descriptions/sponsors and emits a `structlog` + OpenTelemetry event."""
     combined_raw = (
         f"{raw_event} | Sponsor: {vendor.business_sponsor} | Context: {vendor.service_description}"
     )
     scrubbed_event, redaction_count = redact_pii_text(combined_raw)
-    tracer.record_event(
+    entry = tracer.record_event(
         vendor_id=vendor.vendor_id or "VND-UNKNOWN",
         agent_name=agent_name,
         model_tier=model_badge,
@@ -80,6 +84,8 @@ def _record_redacted_audit(
         "event": scrubbed_event,
         "pii_redacted_count": redaction_count,
         "risk_score": risk_score,
+        "trace_id": entry.get("trace_id"),
+        "span_id": entry.get("span_id"),
     }
 
 
@@ -225,8 +231,8 @@ def _compliance_officer_node(state: OnboardingGraphState) -> OnboardingGraphStat
         )
     )
 
-    # Persist session state to SQLite memory store (Rubric Section 2)
-    memory_store.upsert_session(
+    # Schedule non-blocking background persistence to SQLite memory store (Rubric Section 2)
+    memory_store.schedule_background_upsert(
         vendor_id=vendor.vendor_id or "VND-CUSTOM",
         vendor_name=vendor.name,
         onboarding_status=(
@@ -284,6 +290,7 @@ class VendorOnboardingOrchestrator:
         vendor_name: str,
         message: Optional[str] = None,
         vendor_packet: Optional[VendorSubmission] = None,
+        background_tasks: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """Coordinator Intent Router (Rubric Section 1):
         - If the vendor sends a question, routes to Conversational pattern (Flash).
@@ -297,46 +304,103 @@ class VendorOnboardingOrchestrator:
                 vendor_id=vendor_id,
                 vendor_name=vendor_name,
                 question=message or "What is my current onboarding status?",
+                background_tasks=background_tasks,
             )
 
         if vendor_packet is None:
             raise ValueError("vendor_packet is required for DOCUMENT_SUBMISSION sequential pattern.")
-        result = self.run_pipeline(vendor_packet)
+        result = self.run_pipeline(vendor_packet, background_tasks=background_tasks)
         return {
             "intent_routing": intent_info,
             "assessment": result.model_dump(),
         }
 
-    def run_pipeline(self, vendor: VendorSubmission) -> OnboardingRunResult:
-        """Runs the complete 5-phase Sequential (Extraction -> Policy Check) pipeline."""
+    async def aroute_vendor_interaction(
+        self,
+        *,
+        vendor_id: str,
+        vendor_name: str,
+        message: Optional[str] = None,
+        vendor_packet: Optional[VendorSubmission] = None,
+        background_tasks: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """Asynchronously routes vendor interaction without blocking the event loop."""
+        intent_info = classify_vendor_intent(
+            message or "", has_document_attachment=vendor_packet is not None
+        )
+        if intent_info["intent"] == "VENDOR_QUESTION" and vendor_packet is None:
+            return await ahandle_vendor_question(
+                vendor_id=vendor_id,
+                vendor_name=vendor_name,
+                question=message or "What is my current onboarding status?",
+                background_tasks=background_tasks,
+            )
+
+        if vendor_packet is None:
+            raise ValueError("vendor_packet is required for DOCUMENT_SUBMISSION sequential pattern.")
+        result = await self.arun_pipeline(vendor_packet, background_tasks=background_tasks)
+        return {
+            "intent_routing": intent_info,
+            "assessment": result.model_dump(),
+        }
+
+    def run_pipeline(
+        self,
+        vendor: VendorSubmission,
+        background_tasks: Optional[Any] = None,
+    ) -> OnboardingRunResult:
+        """Runs the complete 5-phase Sequential (Extraction -> Policy Check) pipeline with OpenTelemetry root span."""
         assessment_id = f"ASM-{uuid.uuid4().hex[:8].upper()}"
         created_at = _utc_now()
         if not vendor.vendor_id:
             vendor.vendor_id = f"VND-{uuid.uuid4().hex[:4].upper()}"
 
-        initial_state: OnboardingGraphState = {
-            "assessment_id": assessment_id,
-            "created_at": created_at,
-            "vendor": vendor,
-            "intake_assessment": None,
-            "phase_assessments": {},
-            "all_findings": [],
-            "final_decision": None,
-            "audit_trail": [],
-        }
+        with start_otel_span(
+            "vendor_onboarding.pipeline",
+            attributes={
+                "assessment.id": assessment_id,
+                "vendor.id": vendor.vendor_id,
+                "vendor.name": vendor.name,
+                "orchestration.engine": self.get_engine_name(),
+                "orchestration.pattern": "SEQUENTIAL",
+            },
+        ) as root_span:
+            initial_state: OnboardingGraphState = {
+                "assessment_id": assessment_id,
+                "created_at": created_at,
+                "vendor": vendor,
+                "intake_assessment": None,
+                "phase_assessments": {},
+                "all_findings": [],
+                "final_decision": None,
+                "audit_trail": [],
+            }
 
-        if self._compiled_graph is not None:
-            final_state = self._compiled_graph.invoke(initial_state)
-        else:
-            state = _intake_node(initial_state)
-            state = _infosec_node(state)
-            state = _legal_node(state)
-            state = _financial_node(state)
-            final_state = _compliance_officer_node(state)
+            if self._compiled_graph is not None:
+                final_state = self._compiled_graph.invoke(initial_state)
+            else:
+                state = _intake_node(initial_state)
+                state = _infosec_node(state)
+                state = _legal_node(state)
+                state = _financial_node(state)
+                final_state = _compliance_officer_node(state)
 
-        result = self._state_to_result(final_state)
-        self.assessments[result.assessment_id] = result
-        return result
+            result = self._state_to_result(final_state)
+            if result.final_decision:
+                root_span.set_attribute("decision.outcome", result.final_decision.decision.value)
+                root_span.set_attribute(
+                    "decision.composite_risk_score", result.final_decision.composite_risk_score
+                )
+            self.assessments[result.assessment_id] = result
+            return result
+
+    async def arun_pipeline(
+        self,
+        vendor: VendorSubmission,
+        background_tasks: Optional[Any] = None,
+    ) -> OnboardingRunResult:
+        """Asynchronously executes the 5-phase pipeline in a non-blocking worker thread."""
+        return await asyncio.to_thread(self.run_pipeline, vendor, background_tasks)
 
     async def stream_pipeline(
         self, vendor: VendorSubmission, step_delay_sec: float = 0.35
@@ -410,47 +474,75 @@ class VendorOnboardingOrchestrator:
         }
 
     def apply_human_override(
-        self, assessment_id: str, review: HumanReviewDecisionRequest
+        self,
+        assessment_id: str,
+        review: HumanReviewDecisionRequest,
+        background_tasks: Optional[Any] = None,
     ) -> Optional[OnboardingRunResult]:
-        """Resolves a Human-in-the-Loop (HITL) Code Stop with 'approve' or 'reject' and persists to SQLite."""
+        """Resolves a Human-in-the-Loop (HITL) Code Stop and persists asynchronously in the background."""
         result = self.assessments.get(assessment_id)
         if not result or not result.final_decision:
             return None
 
-        previous_decision = result.final_decision.decision.value
-        result.final_decision.decision = review.decision
-        scrubbed_notes, redactions = redact_pii_text(review.notes)
-        override_payload = {
-            "hitl_code_stop_active": False,
-            "status": "HUMAN_FINALIZED",
-            "previous_decision": previous_decision,
-            "new_decision": review.decision.value,
-            "reviewer_name": review.reviewer_name,
-            "notes": scrubbed_notes,
-            "pii_redacted_count": redactions,
-            "overridden_at": _utc_now(),
-        }
-        result.final_decision.human_override = override_payload
-        result.audit_trail.append({
-            "timestamp": override_payload["overridden_at"],
-            "phase": "human_governance",
-            "agent": f"Human Compliance Officer ({review.reviewer_name})",
-            "model_tier": "HUMAN_IN_THE_LOOP",
-            "event": f"Resolved HITL Code Stop: changed {previous_decision} -> {review.decision.value}: {scrubbed_notes}",
-            "pii_redacted_count": redactions,
-            "risk_score": result.final_decision.composite_risk_score,
-        })
+        with start_otel_span(
+            "vendor_onboarding.human_override",
+            attributes={
+                "assessment.id": assessment_id,
+                "vendor.id": result.vendor.vendor_id or "VND-CUSTOM",
+                "reviewer.decision": review.decision.value,
+            },
+        ) as span:
+            previous_decision = result.final_decision.decision.value
+            result.final_decision.decision = review.decision
+            scrubbed_notes, redactions = redact_pii_text(review.notes)
+            override_payload = {
+                "hitl_code_stop_active": False,
+                "status": "HUMAN_FINALIZED",
+                "previous_decision": previous_decision,
+                "new_decision": review.decision.value,
+                "reviewer_name": review.reviewer_name,
+                "notes": scrubbed_notes,
+                "pii_redacted_count": redactions,
+                "overridden_at": _utc_now(),
+                "trace_id": span.trace_id,
+            }
+            result.final_decision.human_override = override_payload
+            result.audit_trail.append(
+                {
+                    "timestamp": override_payload["overridden_at"],
+                    "phase": "human_governance",
+                    "agent": f"Human Compliance Officer ({review.reviewer_name})",
+                    "model_tier": "HUMAN_IN_THE_LOOP",
+                    "event": f"Resolved HITL Code Stop: changed {previous_decision} -> {review.decision.value}: {scrubbed_notes}",
+                    "pii_redacted_count": redactions,
+                    "risk_score": result.final_decision.composite_risk_score,
+                    "trace_id": span.trace_id,
+                    "span_id": span.span_id,
+                }
+            )
 
-        memory_store.upsert_session(
-            vendor_id=result.vendor.vendor_id or "VND-CUSTOM",
-            vendor_name=result.vendor.name,
-            onboarding_status=review.decision.value,
-            risk_level=result.final_decision.residual_risk_level.value,
-            composite_score=result.final_decision.composite_risk_score,
-            pending_hitl=False,
-            audit_logs=result.audit_trail,
+            memory_store.schedule_background_upsert(
+                vendor_id=result.vendor.vendor_id or "VND-CUSTOM",
+                vendor_name=result.vendor.name,
+                onboarding_status=review.decision.value,
+                risk_level=result.final_decision.residual_risk_level.value,
+                composite_score=result.final_decision.composite_risk_score,
+                pending_hitl=False,
+                audit_logs=result.audit_trail,
+                background_tasks=background_tasks,
+            )
+            return result
+
+    async def aapply_human_override(
+        self,
+        assessment_id: str,
+        review: HumanReviewDecisionRequest,
+        background_tasks: Optional[Any] = None,
+    ) -> Optional[OnboardingRunResult]:
+        """Asynchronously resolves a HITL Code Stop using non-blocking background persistence."""
+        return await asyncio.to_thread(
+            self.apply_human_override, assessment_id, review, background_tasks
         )
-        return result
 
     def _state_to_result(self, state: OnboardingGraphState) -> OnboardingRunResult:
         llm_status = llm_client.get_status()

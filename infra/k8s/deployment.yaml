@@ -1,0 +1,155 @@
+# ============================================================================
+# Kubernetes Infrastructure as Code (IaC) Manifests
+# Provisions Namespace, ConfigMap, Secret, PVC, Deployment, Service & HPA
+# ============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vendor-risk-compliance
+  labels:
+    app.kubernetes.io/name: vendor-risk-compliance
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vendor-risk-config
+  namespace: vendor-risk-compliance
+data:
+  ENVIRONMENT: "production"
+  EXECUTION_MODE: "auto"
+  LLM_PROVIDER: "gemini"
+  GEMINI_FAST_MODEL: "gemini-2.5-flash"
+  GEMINI_PRO_MODEL: "gemini-2.5-pro"
+  OPENAI_FAST_MODEL: "gpt-4o-mini"
+  OPENAI_PRO_MODEL: "gpt-4o"
+  OTEL_ENABLED: "true"
+  OTEL_SERVICE_NAME: "vendor-risk-compliance-multi-agent"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.observability.svc.cluster.local:4317"
+  SQLITE_DB_PATH: "/var/lib/vendor-sessions/vendor_sessions.db"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vendor-risk-llm-secrets
+  namespace: vendor-risk-compliance
+type: Opaque
+stringData:
+  # Populated via ExternalSecrets / Cloud Secret Manager CSI Driver at deploy time
+  gemini_api_key: ""
+  openai_api_key: ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vendor-sessions-pvc
+  namespace: vendor-risk-compliance
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vendor-risk-compliance-agent
+  namespace: vendor-risk-compliance
+  labels:
+    app: vendor-risk-compliance-agent
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: vendor-risk-compliance-agent
+  template:
+    metadata:
+      labels:
+        app: vendor-risk-compliance-agent
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: orchestrator
+          image: us-central1-docker.pkg.dev/enterprise-tprm-compliance-prod/vendor-risk-compliance-agent-repo/app:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: vendor-risk-config
+          env:
+            - name: GEMINI_API_KEY_FILE
+              value: "/run/secrets/gemini_api_key"
+            - name: OPENAI_API_KEY_FILE
+              value: "/run/secrets/openai_api_key"
+          volumeMounts:
+            - name: llm-secrets-volume
+              mountPath: "/run/secrets"
+              readOnly: true
+            - name: session-db-volume
+              mountPath: "/var/lib/vendor-sessions"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 3
+            periodSeconds: 10
+      volumes:
+        - name: llm-secrets-volume
+          secret:
+            secretName: vendor-risk-llm-secrets
+        - name: session-db-volume
+          persistentVolumeClaim:
+            claimName: vendor-sessions-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vendor-risk-compliance-svc
+  namespace: vendor-risk-compliance
+spec:
+  type: ClusterIP
+  selector:
+    app: vendor-risk-compliance-agent
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: vendor-risk-compliance-hpa
+  namespace: vendor-risk-compliance
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: vendor-risk-compliance-agent
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75

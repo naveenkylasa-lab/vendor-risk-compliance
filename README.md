@@ -1,76 +1,82 @@
 # Vendor Risk & Compliance Multi-Agent System
 
-An autonomous **5-Phase Third-Party Risk Management (TPRM) & Vendor Onboarding** platform built with **Python, FastAPI, LangGraph StateGraph, and a Hybrid LLM / Compliance Engine** (`Google Gemini` / `OpenAI` + zero-dependency simulation fallback).
+An enterprise **Third-Party Risk Management (TPRM) & Vendor Onboarding** multi-agent platform built with **Python, FastAPI, LangGraph StateGraph, Native LLM Tool Calling (`Google Gemini` & `OpenAI`), Explicit JSON Schemas, Non-Blocking Async/Background SQLite Memory, `structlog` + OpenTelemetry Distributed Tracing, and Terraform/Kubernetes/Docker Infrastructure as Code (IaC)**.
 
 ---
 
-## Architecture & Multi-Agent Pipeline
+## Architecture & Rubric Alignment
 
 ```mermaid
 flowchart LR
-    Sub["Vendor Submission Packet"] --> P1["Phase 1: Intake & Triage Agent"]
-    P1 --> P2["Phase 2: InfoSec & Cyber Risk Agent"]
-    P2 --> P3["Phase 3: Legal, Privacy & Regulatory Agent"]
-    P3 --> P4["Phase 4: Financial & Operational Viability Agent"]
-    P4 --> P5["Phase 5: Risk Aggregator & Compliance Officer Agent"]
-    P5 --> Dec["Executive Determination + HITL Governance"]
+    Input["Vendor Input (Question or Packet)"] --> Coord["Coordinator Agent [Flash]"]
+    Coord -->|VENDOR_QUESTION| Support["Conversational Support Agent [Flash] + Async SQLite Memory"]
+    Coord -->|DOCUMENT_SUBMISSION| P1["Phase 1: Extraction & Intake Agent [Flash]"]
+    P1 --> P2["Phase 2: InfoSec & Constitutional Policy Agent [Pro]"]
+    P2 --> P3["Phase 3: Legal, Privacy & OFAC Agent [Pro]"]
+    P3 --> P4["Phase 4: Financial & BCP/DR Agent [Pro]"]
+    P4 --> P5["Phase 5: Risk Aggregator & Compliance Officer [Pro]"]
+    P5 --> HITL["HITL Code Stop Gate & Background Audit Persistence"]
 ```
 
-### Specialized Agents
+### Key Capabilities
 
-| Phase | Agent | Responsibilities & Tools |
-| :--- | :--- | :--- |
-| **Phase 1** | **Intake & Triage Agent** (`app/agents/intake_agent.py`) | Calculates inherent risk score (`0-100`), assigns criticality tier (`TIER_1_CRITICAL` to `TIER_4_LOW`), checks mandatory compliance documents, and determines fast-track eligibility (`classify_criticality_tier`). |
-| **Phase 2** | **InfoSec & Cyber Risk Agent** (`app/agents/infosec_agent.py`) | Audits SOC 2 Type II & ISO 27001 certifications, exceptions, AES-256/TLS encryption, MFA/SSO enforcement, pentest CVEs, breach notification SLAs, and AI model training governance (`evaluate_infosec_controls`). |
-| **Phase 3** | **Legal, Privacy & Regulatory Agent** (`app/agents/legal_agent.py`) | Screens global OFAC sanctions & adverse media watchlists, verifies GDPR/CCPA DPAs, EU/UK cross-border Standard Contractual Clauses (SCCs), MSA indemnification, and liability super-caps (`evaluate_legal_and_sanctions`). |
-| **Phase 4** | **Financial & Operational Viability Agent** (`app/agents/financial_agent.py`) | Evaluates credit rating, liquidity runway, debt-to-equity leverage, annual BCP/DR failover testing, RTO/RPO recovery targets, and SLA uptime commitments (`evaluate_financial_and_ops`). |
-| **Phase 5** | **Risk Aggregator & Compliance Officer Agent** (`app/agents/compliance_officer_agent.py`) | Computes weighted composite residual risk score, generates a prioritized **Remediation Action Plan**, drafts the **Executive Onboarding Memo**, and issues a determination (`APPROVED`, `APPROVED_WITH_CONDITIONS`, `ESCALATED_FOR_HUMAN_REVIEW`, or `REJECTED`). |
+1. **Orchestration, Strategic Model Routing & HITL Code Stop (`app/orchestrator.py`, `app/llm_client.py`)**
+   - **Intent-Driven Multi-Agent Patterns**: Coordinator Agent classifies vendor input via `IntentClassificationStructuredSchema` into either the **Conversational Pattern** (Flash Support Agent + Persistent Session Memory) or the **Sequential Pattern** (Extraction $\rightarrow$ Constitutional Policy Check $\rightarrow$ HITL Gate).
+   - **Strategic Model Routing**: Routes low-latency agents (`coordinator`, `support`, `intake`) to **Flash** (`gemini-2.5-flash` / `gpt-4o-mini`) and complex reasoning agents (`policy_checker`, `infosec`, `legal`, `financial`, `compliance_officer`) to **Pro** (`gemini-2.5-pro` / `gpt-4o`).
+   - **Human-in-the-Loop (HITL) Code Stop**: Automatically halts execution with `PAUSED_REQUIRING_HUMAN_APPROVAL` when a vendor is flagged as `HIGH` or `CRITICAL` risk.
+
+2. **Non-Blocking Async & Background Task Memory (`app/memory_store.py`)**
+   - **Async Coroutines**: Provides `aget_session`, `aupsert_session`, `aappend_conversation_turn`, and `alist_all_sessions` powered by `aiosqlite` / `asyncio.to_thread` and SQLite Write-Ahead Logging (`PRAGMA journal_mode=WAL`).
+   - **Background Persistence Offloading**: Uses FastAPI `BackgroundTasks`, `asyncio.Task`, and a background `ThreadPoolExecutor` (`schedule_background_upsert`, `schedule_background_conversation_turn`) paired with a write-through in-memory session cache so memory writes never block request handling.
+
+3. **Explicit Tool Docstrings, Strict JSON Schemas & Native LLM Tool Calling (`app/tools.py`, `app/models.py`)**
+   - **Google-Style Docstrings**: Every tool function in `app/tools.py` documents explicit `Args:`, `Returns:`, and `Raises:` parameter specifications.
+   - **Strict JSON Schemas**: Defines `TOOL_JSON_SCHEMAS`, `get_openai_tool_schemas()` (`strict: True`, `additionalProperties: False`), and `get_gemini_tool_declarations()` alongside Pydantic input/output models (`ExtractCertificationsToolArgs`, `ClassifyCriticalityToolArgs`, `EvaluateInfoSecToolArgs`, `EvaluateLegalSanctionsToolArgs`, `EvaluateFinancialOpsToolArgs`, and `AgentStructuredSynthesisSchema`).
+   - **Native LLM Tool Calling**: `HybridLLMClient.execute_agent_with_tools()` binds tool declarations to Gemini (`types.Tool(function_declarations=...)`) and OpenAI (`tools=[...]`), validates LLM tool call arguments via `validate_tool_arguments_against_schema()`, dispatches via `execute_registered_tool()`, and constrains outputs with `response_schema` / `response_format`.
+   - **Guided Error Recovery**: `extract_vendor_security_certifications` returns actionable recovery guidance for encrypted PDFs, OCR-corrupted scans, and expired audit reports.
+
+4. **Structured Logging (`structlog`), OpenTelemetry Tracing & Active PII Redaction (`app/observability.py`)**
+   - **Dedicated Structured Logging**: Uses `structlog` (and `StructuredJSONFormatter`) with ISO-8601 timestamps, log levels, OpenTelemetry trace context injection, and automated PII scrubbing.
+   - **OpenTelemetry Distributed Tracing**: Configures `TracerProvider`, `SimpleSpanProcessor`, `RedactingInMemorySpanExporter`, and `OTLPSpanExporter` with W3C `trace_id` and `span_id` propagation across root pipeline spans (`vendor_onboarding.pipeline`), child agent spans (`agent.*`), and child tool spans (`tool.*`).
+   - **Active PII Redaction**: Scrubs emails, phone numbers, SSNs/EINs, API keys (`sk-*`, `AIza*`), and contact names before logs or span attributes are persisted or exported.
+
+5. **Security-Hardened Secrets & Infrastructure as Code (`app/config.py`, `infra/`, `Dockerfile`, `docker-compose.yml`)**
+   - **Masked `SecretStr` Credentials**: `app/config.py` wraps API keys in Pydantic `SecretStr` and supports Kubernetes/Docker mounted secret files (`GEMINI_API_KEY_FILE=/run/secrets/gemini_api_key`).
+   - **Terraform IaC (`infra/terraform/`)**: Provisions Google Cloud Run v2, Secret Manager secrets, Artifact Registry, least-privilege IAM service accounts, and Cloud Trace / OpenTelemetry roles.
+   - **Kubernetes Manifests (`infra/k8s/deployment.yaml`)**: Provisions `Namespace`, `ConfigMap`, `Secret`, `PersistentVolumeClaim`, hardened non-root `Deployment`, `Service`, and `HorizontalPodAutoscaler`.
+   - **Docker & OpenTelemetry Collector Stack (`Dockerfile`, `docker-compose.yml`, `infra/otel-collector-config.yaml`)**: Multi-stage non-root container image orchestrated alongside `otel-collector` and `jaeger` distributed tracing UI.
 
 ---
 
 ## Quick Start
 
-### 1. Install Dependencies
+### 1. Local Setup
 
 ```bash
 cd vendor-risk-compliance
 pip install -r requirements.txt
-```
-
-### 2. Configure LLM Mode (Optional)
-
-The system runs **out-of-the-box** in hybrid mode (`EXECUTION_MODE=auto`):
-- If `GEMINI_API_KEY` or `OPENAI_API_KEY` is set in `.env` or environment variables, agents use live LLM reasoning to synthesize findings.
-- If no API key is set, it automatically falls back to the built-in deterministic compliance engine.
-
-```bash
 cp .env.example .env
-# Optionally add GEMINI_API_KEY=... or OPENAI_API_KEY=...
-```
-
-### 3. Launch the Interactive Web Dashboard & API Server
-
-```bash
 uvicorn app.main:app --reload --port 8000
 ```
 
-Open **[http://127.0.0.1:8000](http://127.0.0.1:8000)** in your browser to:
-- Select from **4 realistic sample vendor onboarding packets** or create a custom vendor profile.
-- Toggle security, privacy, sanctions, and financial controls in real time to run what-if simulations.
-- Watch the **5 agents execute live via Server-Sent Events (SSE)** with tool telemetry and risk scoring.
-- Perform **Human-in-the-Loop (HITL) Governance Sign-Off** overrides with audit logging.
-
-### 4. Run via CLI
+### 2. Provision with Docker Compose (App + OpenTelemetry Collector + Jaeger)
 
 ```bash
-# Run a single preset vendor (e.g. CloudScale AI Inc.)
-python3 cli.py --preset VND-1001
-
-# Run all 4 sample vendor packets across all risk tiers
-python3 cli.py --all
+docker compose up --build -d
+# Dashboard UI: http://127.0.0.1:8000
+# Jaeger Distributed Tracing UI: http://127.0.0.1:16686
 ```
 
-### 5. Run Tests
+### 3. Provision Cloud Resources with Terraform
+
+```bash
+cd infra/terraform
+terraform init
+terraform plan -var="project_id=your-gcp-project-id"
+terraform apply -var="project_id=your-gcp-project-id"
+```
+
+### 4. Run Automated Pytest Suite
 
 ```bash
 pytest -v

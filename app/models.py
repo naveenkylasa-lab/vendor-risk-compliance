@@ -1,4 +1,4 @@
-"""Pydantic data models for the Vendor Risk & Compliance multi-agent workflow."""
+"""Pydantic data models & explicit JSON Schemas for the Vendor Risk & Compliance multi-agent workflow."""
 
 from __future__ import annotations
 
@@ -9,11 +9,16 @@ from typing import Any, Dict, List, Optional
 
 try:
     from pydantic import BaseModel, Field
+
+    PYDANTIC_V2_AVAILABLE = True
 except ImportError:
+    PYDANTIC_V2_AVAILABLE = False
+
     class _FieldDefault:
         def __init__(self, default: Any = None, default_factory: Any = None, **kwargs: Any) -> None:
             self.default = default
             self.default_factory = default_factory
+            self.metadata = kwargs
 
     def Field(default: Any = None, *, default_factory: Any = None, **kwargs: Any) -> Any:  # type: ignore
         return _FieldDefault(default=default, default_factory=default_factory, **kwargs)
@@ -50,6 +55,18 @@ except ImportError:
 
             return {k: _conv(v) for k, v in self.__dict__.items() if not k.startswith("_")}
 
+        @classmethod
+        def model_json_schema(cls) -> Dict[str, Any]:
+            props: Dict[str, Any] = {}
+            req: List[str] = []
+            for k, v in cls.__dict__.items():
+                if k.startswith("_") or callable(v):
+                    continue
+                desc = v.metadata.get("description", "") if isinstance(v, _FieldDefault) else ""
+                props[k] = {"type": "string", "description": desc}
+                if isinstance(v, _FieldDefault) and v.default is Ellipsis:
+                    req.append(k)
+            return {"title": cls.__name__, "type": "object", "properties": props, "required": req}
 
 
 class CriticalityTier(str, Enum):
@@ -89,66 +106,306 @@ class PhaseStatus(str, Enum):
 
 
 class SecurityPostureInput(BaseModel):
-    soc2_type2_certified: bool = False
-    soc2_exceptions: List[str] = Field(default_factory=list)
-    iso27001_certified: bool = False
-    encryption_at_rest: bool = True
-    encryption_in_transit: bool = True
-    mfa_enforced: bool = True
-    sso_supported: bool = True
-    recent_pentest_completed: bool = False
-    open_critical_cves: int = 0
-    open_high_cves: int = 0
-    incident_notification_hours: int = 72
-    subprocessors_disclosed: bool = True
-    ai_model_trains_on_customer_data: bool = False
+    soc2_type2_certified: bool = Field(
+        default=False, description="True if vendor holds an active SOC 2 Type II attestation."
+    )
+    soc2_exceptions: List[str] = Field(
+        default_factory=list, description="List of noted exceptions in the SOC 2 Type II report."
+    )
+    iso27001_certified: bool = Field(
+        default=False, description="True if vendor holds ISO/IEC 27001:2022 certification."
+    )
+    encryption_at_rest: bool = Field(
+        default=True, description="True if AES-256 or equivalent encryption at rest is enforced."
+    )
+    encryption_in_transit: bool = Field(
+        default=True, description="True if TLS 1.2/1.3 encryption in transit is enforced."
+    )
+    mfa_enforced: bool = Field(
+        default=True, description="True if Multi-Factor Authentication is mandatory."
+    )
+    sso_supported: bool = Field(
+        default=True, description="True if SAML 2.0 / OIDC enterprise SSO is supported."
+    )
+    recent_pentest_completed: bool = Field(
+        default=False, description="True if an independent penetration test was completed within 12 months."
+    )
+    open_critical_cves: int = Field(
+        default=0, ge=0, description="Count of unpatched Critical-severity CVEs."
+    )
+    open_high_cves: int = Field(
+        default=0, ge=0, description="Count of unpatched High-severity CVEs."
+    )
+    incident_notification_hours: int = Field(
+        default=72, ge=1, description="Contractual security breach notification SLA in hours."
+    )
+    subprocessors_disclosed: bool = Field(
+        default=True, description="True if fourth-party subprocessors are publicly disclosed."
+    )
+    ai_model_trains_on_customer_data: bool = Field(
+        default=False, description="True if vendor trains shared AI/ML foundation models on customer data."
+    )
 
 
 class LegalPrivacyInput(BaseModel):
-    msa_accepted: bool = True
-    dpa_signed: bool = False
-    gdpr_compliant: bool = False
-    ccpa_compliant: bool = False
-    hipaa_baa_available: bool = False
-    cross_border_transfers: bool = False
-    scc_mechanism_in_place: bool = False
-    liability_cap_multiplier: float = 2.0  # e.g., 2x annual contract value
-    indemnification_clause_accepted: bool = True
-    sanctions_watchlist_hit: bool = False
-    adverse_media_flags: List[str] = Field(default_factory=list)
-    data_retention_deletion_sla_days: int = 30
+    msa_accepted: bool = Field(
+        default=True, description="True if the Master Services Agreement terms are accepted."
+    )
+    dpa_signed: bool = Field(
+        default=False, description="True if the Data Processing Addendum (DPA) is signed."
+    )
+    gdpr_compliant: bool = Field(
+        default=False, description="True if GDPR Article 28 processor controls are verified."
+    )
+    ccpa_compliant: bool = Field(
+        default=False, description="True if CCPA/CPRA service provider terms are verified."
+    )
+    hipaa_baa_available: bool = Field(
+        default=False, description="True if a HIPAA Business Associate Agreement is available."
+    )
+    cross_border_transfers: bool = Field(
+        default=False, description="True if personal data is transferred across international borders."
+    )
+    scc_mechanism_in_place: bool = Field(
+        default=False, description="True if EU/UK Standard Contractual Clauses (SCCs) are executed."
+    )
+    liability_cap_multiplier: float = Field(
+        default=2.0, ge=0.0, description="Contractual super-cap liability multiplier relative to ACV."
+    )
+    indemnification_clause_accepted: bool = Field(
+        default=True, description="True if mutual IP and data breach indemnification is accepted."
+    )
+    sanctions_watchlist_hit: bool = Field(
+        default=False, description="True if OFAC, EU, or UN sanctions screening returned a match."
+    )
+    adverse_media_flags: List[str] = Field(
+        default_factory=list, description="List of regulatory enforcement or adverse media alerts."
+    )
+    data_retention_deletion_sla_days: int = Field(
+        default=30, ge=1, description="Contractual SLA in days for data deletion upon termination."
+    )
 
 
 class FinancialOpsInput(BaseModel):
-    years_in_business: int = 5
-    annual_revenue_usd: float = 10_000_000.0
-    debt_to_equity_ratio: float = 0.8
-    cash_runway_months: int = 24
-    credit_rating_score: int = 75  # 0 to 100 scale
-    bcp_dr_tested_annually: bool = True
-    rto_hours: float = 4.0
-    rpo_hours: float = 1.0
-    committed_sla_uptime_pct: float = 99.9
-    cyber_insurance_coverage_usd: float = 5_000_000.0
-    single_point_of_failure_risk: bool = False
+    years_in_business: int = Field(
+        default=5, ge=0, description="Number of years the vendor entity has been operating."
+    )
+    annual_revenue_usd: float = Field(
+        default=10_000_000.0, ge=0.0, description="Annual recurring or gross revenue in USD."
+    )
+    debt_to_equity_ratio: float = Field(
+        default=0.8, ge=0.0, description="Total debt-to-equity financial leverage ratio."
+    )
+    cash_runway_months: int = Field(
+        default=24, ge=0, description="Estimated liquidity cash runway in months."
+    )
+    credit_rating_score: int = Field(
+        default=75, ge=0, le=100, description="Commercial credit rating score on a 0-100 scale."
+    )
+    bcp_dr_tested_annually: bool = Field(
+        default=True, description="True if Business Continuity & Disaster Recovery is tested annually."
+    )
+    rto_hours: float = Field(
+        default=4.0, ge=0.0, description="Recovery Time Objective (RTO) in hours."
+    )
+    rpo_hours: float = Field(
+        default=1.0, ge=0.0, description="Recovery Point Objective (RPO) in hours."
+    )
+    committed_sla_uptime_pct: float = Field(
+        default=99.9, ge=0.0, le=100.0, description="Contractually committed availability SLA percentage."
+    )
+    cyber_insurance_coverage_usd: float = Field(
+        default=5_000_000.0, ge=0.0, description="Active cyber liability insurance coverage in USD."
+    )
+    single_point_of_failure_risk: bool = Field(
+        default=False, description="True if single-region hosting or SPOF concentration risk exists."
+    )
 
 
 class VendorSubmission(BaseModel):
-    vendor_id: Optional[str] = None
-    name: str
-    category: str
-    website: str
-    country: str = "United States"
-    business_sponsor: str = "VP of Engineering"
-    service_description: str
-    annual_contract_value_usd: float = 100_000.0
-    data_sensitivity: DataSensitivity = DataSensitivity.CONFIDENTIAL_INTERNAL
-    requires_network_integration: bool = True
-    estimated_records_exposed: int = 10_000
-    submitted_documents: List[str] = Field(default_factory=list)
+    vendor_id: Optional[str] = Field(default=None, description="Unique vendor identifier (e.g. VND-1001).")
+    name: str = Field(..., description="Legal name of the vendor organization.")
+    category: str = Field(..., description="Service category or industry vertical.")
+    website: str = Field(..., description="Corporate website URL.")
+    country: str = Field(default="United States", description="Primary country of incorporation.")
+    business_sponsor: str = Field(default="VP of Engineering", description="Internal executive sponsor.")
+    service_description: str = Field(..., description="Description of the product/service and data scope.")
+    annual_contract_value_usd: float = Field(default=100_000.0, ge=0.0, description="Annual contract value in USD.")
+    data_sensitivity: DataSensitivity = Field(
+        default=DataSensitivity.CONFIDENTIAL_INTERNAL,
+        description="Highest sensitivity tier of enterprise data shared with the vendor.",
+    )
+    requires_network_integration: bool = Field(
+        default=True, description="True if vendor integrates directly with internal networks or APIs."
+    )
+    estimated_records_exposed: int = Field(
+        default=10_000, ge=0, description="Estimated volume of sensitive records accessible by the vendor."
+    )
+    submitted_documents: List[str] = Field(
+        default_factory=list, description="List of compliance evidence documents provided by the vendor."
+    )
     security: SecurityPostureInput = Field(default_factory=SecurityPostureInput)
     legal: LegalPrivacyInput = Field(default_factory=LegalPrivacyInput)
     financial: FinancialOpsInput = Field(default_factory=FinancialOpsInput)
+
+
+# ---------------------------------------------------------------------------
+# Explicit Tool Input / Output Pydantic Schemas & LLM Output Constraints
+# ---------------------------------------------------------------------------
+class ExtractCertificationsToolArgs(BaseModel):
+    """Explicit JSON Schema input parameters for `extract_vendor_security_certifications`."""
+
+    vendor_name: str = Field(
+        ..., description="Legal name of the vendor submitting compliance artifacts."
+    )
+    submitted_documents: List[str] = Field(
+        default_factory=list,
+        description="List of compliance document filenames or titles uploaded by the vendor.",
+    )
+
+
+class ExtractCertificationsToolResult(BaseModel):
+    """Explicit JSON Schema output structure for `extract_vendor_security_certifications`."""
+
+    status: str = Field(
+        ...,
+        description="Extraction status: 'EXTRACTION_SUCCESS' or 'GUIDED_ERROR_RECOVERY_REQUIRED'.",
+    )
+    extracted_certifications: List[str] = Field(
+        default_factory=list,
+        description="Verified compliance certifications extracted from valid documents.",
+    )
+    guided_errors: List[str] = Field(
+        default_factory=list,
+        description="Actionable guided recovery messages for encrypted, unreadable, or expired files.",
+    )
+    documents_scanned: int = Field(
+        ..., ge=0, description="Total number of submitted document artifacts inspected."
+    )
+
+
+class ClassifyCriticalityToolArgs(BaseModel):
+    """Explicit JSON Schema input parameters for `classify_criticality_tier`."""
+
+    data_sensitivity: DataSensitivity = Field(
+        ..., description="Highest sensitivity classification of enterprise data exposed."
+    )
+    requires_network_integration: bool = Field(
+        ..., description="Whether the vendor requires direct VPC/API/SSO network integration."
+    )
+    estimated_records_exposed: int = Field(
+        ..., ge=0, description="Estimated number of customer or employee records exposed."
+    )
+    annual_contract_value_usd: float = Field(
+        ..., ge=0.0, description="Annual contract spend in USD."
+    )
+    submitted_documents: List[str] = Field(
+        default_factory=list,
+        description="List of compliance document filenames or titles submitted by the vendor.",
+    )
+
+
+class ClassifyCriticalityToolResult(BaseModel):
+    """Explicit JSON Schema output structure for `classify_criticality_tier`."""
+
+    inherent_risk_score: float = Field(
+        ..., ge=0.0, le=100.0, description="Calculated inherent risk score on a 0-100 scale."
+    )
+    criticality_tier: CriticalityTier = Field(
+        ..., description="Assigned vendor criticality tier (TIER_1_CRITICAL to TIER_4_LOW)."
+    )
+    required_documents: List[str] = Field(
+        default_factory=list, description="Mandatory onboarding documents required for this tier."
+    )
+    missing_documents: List[str] = Field(
+        default_factory=list, description="Mandatory documents missing from the vendor submission."
+    )
+    fast_track_eligible: bool = Field(
+        ..., description="True if vendor qualifies for streamlined Tier 4 fast-track onboarding."
+    )
+
+
+class EvaluateInfoSecToolArgs(BaseModel):
+    """Explicit JSON Schema input parameters for `evaluate_infosec_controls`."""
+
+    vendor_name: str = Field(..., description="Legal name of the vendor being audited.")
+    criticality_tier: CriticalityTier = Field(
+        ..., description="Vendor criticality tier governing mandatory security controls."
+    )
+    data_sensitivity: DataSensitivity = Field(
+        ..., description="Sensitivity level of data handled by the vendor."
+    )
+    security: SecurityPostureInput = Field(
+        ..., description="Technical security posture, certifications, CVEs, and AI training flags."
+    )
+
+
+class EvaluateLegalSanctionsToolArgs(BaseModel):
+    """Explicit JSON Schema input parameters for `evaluate_legal_and_sanctions`."""
+
+    vendor_name: str = Field(..., description="Legal name of the vendor being screened.")
+    country: str = Field(
+        ..., description="Primary country of incorporation for OFAC/sanctions watchlist screening."
+    )
+    criticality_tier: CriticalityTier = Field(
+        ..., description="Vendor criticality tier governing contractual liability super-caps."
+    )
+    data_sensitivity: DataSensitivity = Field(
+        ..., description="Sensitivity level of data handled by the vendor."
+    )
+    legal: LegalPrivacyInput = Field(
+        ..., description="Legal, privacy, DPA, cross-border SCC, and sanctions screening inputs."
+    )
+
+
+class EvaluateFinancialOpsToolArgs(BaseModel):
+    """Explicit JSON Schema input parameters for `evaluate_financial_and_ops`."""
+
+    vendor_name: str = Field(..., description="Legal name of the vendor being evaluated.")
+    criticality_tier: CriticalityTier = Field(
+        ..., description="Vendor criticality tier governing BCP/DR RTO and SLA uptime thresholds."
+    )
+    financial: FinancialOpsInput = Field(
+        ..., description="Financial solvency, credit score, cash runway, BCP/DR, and SLA inputs."
+    )
+
+
+class AgentStructuredSynthesisSchema(BaseModel):
+    """Explicit JSON Schema used to constrain LLM structured outputs (`response_schema`)."""
+
+    summary: str = Field(
+        ...,
+        description="Authoritative 2-4 sentence synthesis of the agent's domain risk evaluation.",
+    )
+    constitutional_compliance_status: str = Field(
+        default="COMPLIANT",
+        description="Constitutional compliance status: 'COMPLIANT', 'CONDITIONAL_VIOLATION', or 'CRITICAL_VIOLATION'.",
+    )
+    key_risk_indicators: List[str] = Field(
+        default_factory=list,
+        description="Structured list of key risk indicators or control gaps identified.",
+    )
+    recommended_next_step: str = Field(
+        default="Proceed to next onboarding phase.",
+        description="Concrete governance action recommended by the specialist agent.",
+    )
+
+
+class IntentClassificationStructuredSchema(BaseModel):
+    """Explicit JSON Schema constraining the Coordinator Agent's intent routing output."""
+
+    intent: str = Field(
+        ...,
+        description="Classified vendor intent: 'VENDOR_QUESTION' or 'DOCUMENT_SUBMISSION'.",
+    )
+    pattern: str = Field(
+        ...,
+        description="Selected multi-agent execution pattern: 'CONVERSATIONAL' or 'SEQUENTIAL'.",
+    )
+    rationale: str = Field(
+        ...,
+        description="Concise justification for selecting the conversational or sequential pattern.",
+    )
 
 
 class RiskFinding(BaseModel):
@@ -176,6 +433,9 @@ class ToolCallTrace(BaseModel):
     inputs: Dict[str, Any] = Field(default_factory=dict)
     output_summary: str
     timestamp: str
+    json_schema_validated: bool = True
+    invocation_mechanism: str = "native_llm_tool_calling"
+    otel_span_id: Optional[str] = None
 
 
 class PhaseAssessment(BaseModel):
